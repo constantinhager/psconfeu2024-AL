@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="5" errors="0" failures="0" not-run="58" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2024-02-10" time="15:45:41">
+  <environment os-version="10.0.20348" user-domain="psconfeuvm" platform="Microsoft Windows Server 2022 Datacenter Azure Edition|C:\Windows|\Device\Harddisk0\Partition4" user="psconfeu" machine-name="psconfeuvm" cwd="E:\GIT\psconfeu2024-AL" clr-version="8.0.1" nunit-version="2.5.8.0" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="7.0135" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Program Files\PowerShell\Modules\AutomatedLabTest\5.50.5\tests\00General.tests.ps1" executed="True" result="Success" success="True" time="0.9139" asserts="0" description="C:\Program Files\PowerShell\Modules\AutomatedLabTest\5.50.5\tests\00General.tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="[LAB1] General" executed="True" result="Success" success="True" time="0.6541" asserts="0" description="[LAB1] General">
+            <results>
+              <test-suite type="TestFixture" name="[LAB1] General.Lab deployment successful" executed="True" result="Success" success="True" time="0.6436" asserts="0" description="[LAB1] General.Lab deployment successful">
+                <results>
+                  <test-suite type="ParameterizedTest" name="[LAB1] General.Lab deployment successful.[&lt;LabName&gt;] Should return the correct amount of machines" executed="True" result="Success" success="True" time="0.6378" asserts="0" description="[&lt;LabName&gt;] Should return the correct amount of machines">
+                    <results>
+                      <test-case description="[LAB1] Should return the correct amount of machines" name="[LAB1] General.Lab deployment successful.[LAB1] Should return the correct amount of machines" time="0.6378" asserts="0" success="True" result="Success" executed="True" />
+                    </results>
+                  </test-suite>
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="C:\Program Files\PowerShell\Modules\AutomatedLabTest\5.50.5\tests\RootDC.tests.ps1" executed="True" result="Success" success="True" time="3.1539" asserts="0" description="C:\Program Files\PowerShell\Modules\AutomatedLabTest\5.50.5\tests\RootDC.tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="[LAB1] DC Generic" executed="True" result="Success" success="True" time="1.5457" asserts="0" description="[LAB1] DC Generic">
+            <results>
+              <test-suite type="TestFixture" name="[LAB1] DC Generic.Role deployment successful" executed="True" result="Success" success="True" time="1.5421" asserts="0" description="[LAB1] DC Generic.Role deployment successful">
+                <results>
+                  <test-case description="[RootDC] Should return the correct amount of machines" name="[LAB1] DC Generic.Role deployment successful.[RootDC] Should return the correct amount of machines" time="0.047" asserts="0" success="True" result="Success" executed="True" />
+                  <test-suite type="ParameterizedTest" name="[LAB1] DC Generic.Role deployment successful.LAB1DC should have ADWS running" executed="True" result="Success" success="True" time="0.7226" asserts="0" description="LAB1DC should have ADWS running">
+                    <results>
+                      <test-case description="LAB1DC should have ADWS running" name="[LAB1] DC Generic.Role deployment successful.LAB1DC should have ADWS running(LAB1DC)" time="0.7226" asserts="0" success="True" result="Success" executed="True" />
+                    </results>
+                  </test-suite>
+                  <test-suite type="ParameterizedTest" name="[LAB1] DC Generic.Role deployment successful.LAB1DC should respond to ADWS calls" executed="True" result="Success" success="True" time="0.767" asserts="0" description="LAB1DC should respond to ADWS calls">
+                    <results>
+                      <test-case description="LAB1DC should respond to ADWS calls" name="[LAB1] DC Generic.Role deployment successful.LAB1DC should respond to ADWS calls(LAB1DC)" time="0.767" asserts="0" success="True" result="Success" executed="True" />
+                    </results>
+                  </test-suite>
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="[LAB1] RootDC specific" executed="True" result="Success" success="True" time="2.9088" asserts="0" description="[LAB1] RootDC specific">
+            <results>
+              <test-suite type="ParameterizedTest" name="[LAB1] RootDC specific.LAB1DC should hold PDC emulator FSMO role" executed="True" result="Success" success="True" time="1.3586" asserts="0" description="LAB1DC should hold PDC emulator FSMO role">
+                <results>
+                  <test-case description="LAB1DC should hold PDC emulator FSMO role" name="[LAB1] RootDC specific.LAB1DC should hold PDC emulator FSMO role(LAB1DC)" time="1.3586" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
