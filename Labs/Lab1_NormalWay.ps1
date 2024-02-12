@@ -88,10 +88,10 @@ Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Preparing Disk
     Get-Disk | Where-Object Number -NE $Null | Where-Object IsBoot -NE $True | Where-Object IsSystem -NE $True | Where-Object PartitionStyle -EQ RAW | Group-Object -NoElement -Property FriendlyName
 } -PassThru
 
-# Run Cluster Validation
-Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Run Cluster Validation' -ScriptBlock {
-    Test-Cluster -Node LAB1SQL1, LAB1SQL2 -Include 'Storage Spaces Direct', 'Inventory', 'Network', 'System Configuration'
-} -PassThru
+# Run Cluster Validation (Optional for lab environment)
+#Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Run Cluster Validation' -ScriptBlock {
+#Test-Cluster -Node LAB1SQL1, LAB1SQL2 -Include 'Storage Spaces Direct', 'Inventory', 'Network', 'System Configuration'
+#} -PassThru
 
 # Create dns entry for Cluster
 Invoke-LabCommand -ComputerName LAB1DC -ActivityName 'Create DNS Entry for Cluster' -ScriptBlock {
@@ -103,6 +103,12 @@ Invoke-LabCommand -ComputerName LAB1DC -ActivityName 'Create DNS Entry for Alway
     Add-DnsServerResourceRecordA -Name LAB1SQLAG -ZoneName contoso.com -AllowUpdateAny -IPv4Address 192.168.1.201
 } -PassThru
 
+# Create SQL Server Engine Account
+Invoke-LabCommand -ComputerName LAB1DC -ActivityName 'Create SQL Server Engine Account' -ScriptBlock {
+    $Password = ConvertTo-SecureString -String 'SomePass1' -AsPlainText -Force
+    New-ADUser -Name 'SQLSvc' -AccountPassword $Password -Enabled $true -PasswordNeverExpires $true
+} -PassThru
+
 # Create the cluster
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Create Cluster' -ScriptBlock {
     New-Cluster -Name LAB1SQLCL -Node LAB1SQL1, LAB1SQL2 -StaticAddress 192.168.1.200 -NoStorage
@@ -110,12 +116,12 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Create Cluster' -ScriptB
 
 # Configure the cluster quorum as cloud witness
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Configure Cluster Quorum' -ScriptBlock {
-    Set-ClusterQuorum -CloudWitness -AccountName lab1clwidness -AccessKey '<StorageAccountAccessKey>'
+    Set-ClusterQuorum -CloudWitness -AccountName lab1clwidness -AccessKey '<YourAccessKey>'
 } -PassThru
 
 # Enable storage spaces direct
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Enable Storage Spaces Direct' -ScriptBlock {
-    Enable-ClusterStorageSpacesDirect
+    Enable-ClusterStorageSpacesDirect -Confirm:$false
 } -PassThru
 
 # Generate Cluster volumes for Log, Data and Backup and SQL Install Sources
@@ -139,21 +145,21 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Create Folders and Share
     New-Item -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL1' -ItemType Directory
     New-Item -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL2' -ItemType Directory
     New-Item -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL1' -ItemType Directory
-    New-Item -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SLQ2' -ItemType Directory
+    New-Item -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL2' -ItemType Directory
     New-Item -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL1' -ItemType Directory
     New-Item -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL2' -ItemType Directory
     New-Item -Path 'C:\ClusterStorage\SQLSources\Shares\Sources' -ItemType Directory
-    New-SmbShare -Name SQLData -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
-    New-SmbShare -Name SQLData -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
-    New-SmbShare -Name SQLLog -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
-    New-SmbShare -Name SQLLog -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
-    New-SmbShare -Name SQLBackup -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
-    New-SmbShare -Name SQLBackup -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Data_LAB1SQL1 -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Data_LAB1SQL2 -Path 'C:\ClusterStorage\SQLData\Shares\Data_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Log_LAB1SQL1 -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Log_LAB1SQL2 -Path 'C:\ClusterStorage\SQLLog\Shares\Log_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Backup_LAB1SQL1 -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL1' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
+    New-SmbShare -Name Backup_LAB1SQL2 -Path 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB1SQL2' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
     New-SmbShare -Name SQLSources -Path 'C:\ClusterStorage\SQLSources\Shares\Sources' -FullAccess 'Everyone' -ScopeName LAB1SQLSOF
 } -PassThru
 
 # Download SQL Server 2022 current Cumulative Update
-Splat = @{
+$splat = @{
     Uri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
     Path = "$labSources\SoftwarePackages\SQLServer2022-KB5032679-x64.exe"
 }
@@ -173,15 +179,6 @@ $Splat = @{
 }
 Get-LabInternetFile @splat
 
-# Copy SQL Server 2022 into the SQLSources share
-$splat = @{
-    ComputerName          = 'LAB1SQL1'
-    Path                  = "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso"
-    DestinationFolderPath = 'C:\ClusterStorage\SQLSources\Shares\Sources'
-    PassThru              = $true
-}
-Copy-LabFileItem @splat
-
 # Copy SQL Server 2022 CU SQLSources share
 $splat = @{
     ComputerName          = 'LAB1SQL1'
@@ -200,7 +197,7 @@ $splat = @{
 }
 Copy-LabFileItem @splat
 
-# Copy World Wide Importers into the SQLSources share
+# Copy Adventure Works database into the SQLSources share
 $splat = @{
     ComputerName          = 'LAB1SQL1'
     Path                  = "$labSources\SoftwarePackages\AdventureWorksLT2022.bak"
@@ -209,19 +206,17 @@ $splat = @{
 }
 Copy-LabFileItem @splat
 
-# Mount sql server 2022 iso on LAB1SQL1
-Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Mount SQL Server 2022 ISO' -ScriptBlock {
-    Mount-DiskImage -ImagePath 'C:\ClusterStorage\SQLSources\Shares\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
-} -PassThru
+# restart LAB1SQL1, LAB1SQL2
+Write-ScreenInfo -Message 'Restarting LAB1SQL1 and LAB1SQL2 before installing Microsoft SQL Server' -TaskStart
+Restart-LabVM -ComputerName LAB1SQL1, LAB1SQL2 -Wait -ProgressIndicator 5 -NoNewLine
+Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL1 and LAB1SQL2' -TaskEnd
 
-# Create SQL Server Engine Account
-Invoke-LabCommand -ComputerName LAB1DC -ActivityName 'Create SQL Server Engine Account' -ScriptBlock {
-    $Password = ConvertTo-SecureString -String 'SomePass1' -AsPlainText -Force
-    New-ADUser -Name 'SQLSvc' -AccountPassword $Password -Enabled $true -PasswordNeverExpires $true
-} -PassThru
+# Mount sql server 2022 iso on LAB1SQL1
+$Info = Mount-LabIsoImage -ComputerName LAB1SQL1 -IsoPath "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso" -PassThru
+$DriveLetter = $Info.DriveLetter
 
 # Install SQL Server 2022 on LAB1SQL1
-Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Install SQL Server 2022' -ScriptBlock {
+Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Install SQL Server 2022' -Variable (Get-Variable -Name DriveLetter) -ScriptBlock {
 
     $EngineCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
     $AgentCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
@@ -231,11 +226,11 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Install SQL Server 2022'
         SQLInstance      = 'LAB1SQL1'
         Version          = '2022'
         Feature          = 'Engine'
-        Path             = 'D:\'
+        Path             = "$DriveLetter\"
         UpdateSourcePath = '\\LAB1SQLSOF\SQLSources'
         Confirm          = $false
         DataPath         = '\\LAB1SQLSOF\Data_LAB1SQL1'
-        LogPath          = '\\LAB1SQLSOF\Log_LABSQL1'
+        LogPath          = '\\LAB1SQLSOF\Log_LAB1SQL1'
         BackupPath       = '\\LAB1SQLSOF\Backup_LAB1SQL1'
         EngineCredential = $EngineCredential
         AgentCredential  = $AgentCredential
@@ -256,17 +251,19 @@ $Splat = @{
 Install-LabSoftwarePackage @Splat
 
 # Dismout sql server 2022 iso on LAB1SQL1
-Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Dismount SQL Server 2022 ISO' -ScriptBlock {
-    Dismount-DiskImage -ImagePath 'C:\ClusterStorage\SQLSources\Shares\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
-} -PassThru
+Dismount-LabIsoImage -ComputerName LAB1SQL1
+
+# Restart LAB1SQL1
+Write-ScreenInfo -Message 'Restarting LAB1SQL1' -TaskStart
+Restart-LabVM -ComputerName LAB1SQL1 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL1' -TaskEnd
 
 # Mount sql server 2022 iso on LAB1SQL2
-Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Mount SQL Server 2022 ISO' -ScriptBlock {
-    Mount-DiskImage -ImagePath 'C:\ClusterStorage\SQLSources\Shares\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
-} -PassThru
+$Info = Mount-LabIsoImage -ComputerName LAB1SQL2 -IsoPath "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso" -PassThru
+$DriveLetter = $Info.DriveLetter
 
 # Install SQL Server 2022 on LAB1SQL2
-Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Install SQL Server 2022' -ScriptBlock {
+Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Install SQL Server 2022' -Variable (Get-Variable -Name DriveLetter) -ScriptBlock {
 
     $EngineCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
     $AgentCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
@@ -276,7 +273,7 @@ Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Install SQL Server 2022'
         SQLInstance      = 'LAB1SQL2'
         Version          = '2022'
         Feature          = 'Engine'
-        Path             = 'D:\'
+        Path             = "$DriveLetter\"
         UpdateSourcePath = '\\LAB1SQLSOF\SQLSources'
         Confirm          = $false
         DataPath         = '\\LAB1SQLSOF\Data_LAB1SQL2'
@@ -301,9 +298,12 @@ $Splat = @{
 Install-LabSoftwarePackage @Splat
 
 # Dismout sql server 2022 iso on LAB1SQL2
-Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Dismount SQL Server 2022 ISO' -ScriptBlock {
-    Dismount-DiskImage -ImagePath 'C:\ClusterStorage\SQLSources\Shares\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
-} -PassThru
+Dismount-LabIsoImage -ComputerName LAB1SQL2
+
+# Restart LAB1SQL2
+Write-ScreenInfo -Message 'Restarting LAB1SQL2' -TaskStart
+Restart-LabVM -ComputerName LAB1SQL2 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL2' -TaskEnd
 
 # Revert the SQL Security settings
 Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Revert SQL Security Settings' -ScriptBlock {
