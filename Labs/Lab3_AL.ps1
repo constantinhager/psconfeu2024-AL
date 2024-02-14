@@ -78,6 +78,19 @@ $roles = @()
 $roles += $clusterRole
 $roles += $SqlRole
 
+# Post Installation Activities
+$PostInstallActivities = @()
+$PResourceGet = Get-LabPostInstallationActivity -CustomRole InstallPSResourceGet
+$DBATools = Get-LabPostInstallationActivity -CustomRole InstallDBATools
+$SQLCU = Get-LabPostInstallationActivity -CustomRole InstallSQLServerCU -Properties @{
+    KBUri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
+    KBName = 'SQLServer2022-KB5032679-x64.exe'
+}
+
+$PostInstallActivities += $PResourceGet
+$PostInstallActivities += $DBATools
+$PostInstallActivities += $SQLCU
+
 # SQL Server 1, Failover Cluster Node
 $splat = @{
     VirtualSwitch  = 'NATSwitchLab3'
@@ -89,11 +102,12 @@ $netAdapter = New-LabNetworkAdapterDefinition @splat
 Add-LabDiskDefinition -Name Lab3SQL1DataDrive1 -DiskSizeInGb 100
 Add-LabDiskDefinition -Name Lab3SQL1DataDrive2 -DiskSizeInGb 100
 $splat = @{
-    Name           = 'LAB3SQL1'
-    Processors     = 2
-    NetworkAdapter = $netAdapter
-    Roles          = $roles
-    DiskName       = 'Lab3SQL1DataDrive1', 'Lab3SQL1DataDrive2'
+    Name                     = 'LAB3SQL1'
+    Processors               = 2
+    NetworkAdapter           = $netAdapter
+    Roles                    = $roles
+    DiskName                 = 'Lab3SQL1DataDrive1', 'Lab3SQL1DataDrive2'
+    PostInstallationActivity = $PostInstallActivities
 }
 Add-LabMachineDefinition @splat
 
@@ -108,11 +122,12 @@ $netAdapter = New-LabNetworkAdapterDefinition @splat
 Add-LabDiskDefinition -Name Lab3SQL2DataDrive1 -DiskSizeInGb 100
 Add-LabDiskDefinition -Name Lab3SQL2DataDrive2 -DiskSizeInGb 100
 $splat = @{
-    Name           = 'LAB3SQL2'
-    Processors     = 2
-    NetworkAdapter = $netAdapter
-    Roles          = $roles
-    DiskName       = 'Lab3SQL2DataDrive1', 'Lab3SQL2DataDrive2'
+    Name                     = 'LAB3SQL2'
+    Processors               = 2
+    NetworkAdapter           = $netAdapter
+    Roles                    = $roles
+    DiskName                 = 'Lab3SQL2DataDrive1', 'Lab3SQL2DataDrive2'
+    PostInstallationActivity = $PostInstallActivities
 }
 Add-LabMachineDefinition @splat
 
