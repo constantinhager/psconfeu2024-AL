@@ -396,5 +396,8 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
 Labs/testResults.xml
 Labs/SQLTestLab.ps1
+.secrets.psd1
+

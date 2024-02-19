@@ -10,12 +10,18 @@ param(
 
     [Parameter(Mandatory)]
     [string]
-    $ComputerName
+    $ComputerName,
+
+    [Parameter()]
+    [string]
+    $DestinationFolderPath = 'C:\SQLServerCU'
 )
 
 Import-Lab -Name $data.Name -NoValidation -NoDisplay
 
-$LABSQLServer = Get-LabVM | Where-Object { $_.Roles.Name -like 'SQL*' } | Select-Object -ExpandProperty Name
+$SQLServerVersion = $KBName.Split('-')[0]
+
+$LABSQLServer = (Get-LabVM -Role $SQLServerVersion).Name
 
 # Inspired by https://github.com/dataplat/dbatools/blob/master/private/functions/Test-PendingReboot.ps1
 function Test-PendingReboot {
@@ -78,12 +84,13 @@ foreach($SQLServer in $LABSQLServer) {
 
     # Upload to Computer $ComputerName
     Write-ScreenInfo -Message "Uploading $KBName to $SQLServer"
-    Copy-LabFileItem -Path "$labSources\SoftwarePackages\$KBName" -DestinationFolderPath 'C:\SQLServerCU' -ComputerName $SQLServer
+    Copy-LabFileItem -Path "$labSources\SoftwarePackages\$KBName" -DestinationFolderPath $DestinationFolderPath -ComputerName $SQLServer
 
     # Install the latest cumulative update for SQL Server
     Invoke-LabCommand -ActivityName "Installing $KBName on $SQLServer" -ComputerName $SQLServer -ScriptBlock {
-        Update-DbaInstance -Path "C:\SQLServerCU\$KBName" -ExtractPath 'C:\SQLServerCU' -Confirm:$false
-    } -Variable (Get-Variable KBName) -PassThru
+        $KBNamePath = Join-Path -Path $DestinationFolderPath -ChildPath $KBName
+        Update-DbaInstance -Path $KBNamePath -ExtractPath $DestinationFolderPath -Confirm:$false
+    } -Variable (Get-Variable KBName), (Get-Variable -Name DestinationFolderPath) -PassThru
 
     # Test if reboot is required. If so, reboot the computer.
     if (Test-PendingReboot -ComputerName $SQLServer) {
@@ -93,11 +100,9 @@ foreach($SQLServer in $LABSQLServer) {
 
     # Check if every SQL Server service is running
     Invoke-LabCommand -ComputerName $SQLServer -ActivityName 'Check if every SQL Server service is running. If not start them.' -ScriptBlock {
-        $services = Get-Service -DisplayName 'MSSQL*'
+        $services = Get-Service -Name '*SQL*' | Where-Object { $_.Name -ne 'SQLTELEMETRY' -and $_.Name -ne 'SQLWriter' }
         foreach ($service in $services) {
-            if ($service.Status -ne 'Running') {
-                Start-Service -Name $service.Name
-            }
+            $service.WaitForStatus('Running')
         }
     } -PassThru
 }

@@ -20,6 +20,8 @@
 #>
 
 $labName = 'LAB3'
+$SecretFile = Import-PowerShellDataFile -Path E:\GIT\psconfeu2024-AL\.secrets.psd1
+
 New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV
 
 Add-LabIsoImageDefinition -Name SQLServer2022 -Path $labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso
@@ -167,16 +169,14 @@ $roles += $clusterRole
 
 # Post Installation Activities
 $PostInstallActivities = @()
-#$PResourceGet = Get-LabPostInstallationActivity -CustomRole InstallPSResourceGet
-#$DBATools = Get-LabPostInstallationActivity -CustomRole InstallDBATools
 #$SQLCU = Get-LabPostInstallationActivity -CustomRole InstallSQLServerCU -Properties @{
 #    KBUri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
 #    KBName = 'SQLServer2022-KB5032679-x64.exe'
 #}
 $PrepareDisksForS2D = Get-LabPostInstallationActivity -CustomRole PrepareDisksForS2D
 $ClusterCloudWitness = Get-LabPostInstallationActivity -CustomRole InstallClusterCloudWitness -Properties @{
-    StorageAccountName = 'lab3clwitness'
-    AccessKey          = '/lRB+GKZ9KrBTX/aLRJCSX4P403aUoGiaJ4T69q2ZXA0aJ1SjnXkZZPhVB2/+CubsDey31EfaP+F+AStLjYVEw=='
+    StorageAccountName = $SecretFile.Lab3.witnessStorageAccountName
+    AccessKey          = $SecretFile.Lab3.witnessStorageAccountKey
 }
 $EnableS2D = Get-LabPostInstallationActivity -CustomRole EnableS2D
 $ClusterVolumes = Get-LabPostInstallationActivity -CustomRole InstallClusterVolumes -Properties @{
@@ -190,6 +190,17 @@ $FoldersAndShares = Get-LabPostInstallationActivity -CustomRole InstallScaleOutF
     SOFSName                        = 'LAB3SQLSOF'
     ClusterFolderAndShareDefinition = $ClusterFolderAndShareDefinition
 }
+$PResourceGet = Get-LabPostInstallationActivity -CustomRole InstallPSResourceGet
+$DBATools = Get-LabPostInstallationActivity -CustomRole InstallDBATools
+$SQLCU = Get-LabPostInstallationActivity -CustomRole InstallSQLServerCU -Properties @{
+    KBUri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
+    KBName = 'SQLServer2022-KB5032679-x64.exe'
+}
+$RestoreSampleDatabase = Get-LabPostInstallationActivity -CustomRole RestoreSampleDatabase -Properties @{
+    DestinationFolderPath = '\\LAB3SQLSOF\Sources'
+}
+
+
 #$RestoreSampleDatabase = Get-LabPostInstallationActivity -CustomRole RestoreSampleDatabase -Properties @{
 #    DestinationFolderPath = '\\LAB3SQLSOF\Sources'
 #}
@@ -203,16 +214,16 @@ $FoldersAndShares = Get-LabPostInstallationActivity -CustomRole InstallScaleOutF
 #    SQLEngineAccountName = 'contoso\sqlsvc'
 #}
 
-#$PostInstallActivities += $PResourceGet
-#$PostInstallActivities += $DBATools
-#$PostInstallActivities += $SQLCU
 $PostInstallActivities += $PrepareDisksForS2D
 $PostInstallActivities += $ClusterCloudWitness
 $PostInstallActivities += $EnableS2D
 $PostInstallActivities += $ClusterVolumes
 $PostInstallActivities += $ScaleOutFileServer
 $PostInstallActivities += $FoldersAndShares
-#$PostInstallActivities += $RestoreSampleDatabase
+$PostInstallActivities += $PResourceGet
+$PostInstallActivities += $DBATools
+$PostInstallActivities += $SQLCU
+$PostInstallActivities += $RestoreSampleDatabase
 #$PostInstallActivities += $PrepareSampleDatabaseForAG
 #$PostInstallActivities += $CreateAG
 
