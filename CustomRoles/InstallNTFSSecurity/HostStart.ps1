@@ -10,12 +10,12 @@ $SQLVMs = (Get-LabVM -Role SQLServer).Name
 
 # Install dbatools module
 foreach ($SQLVM in $SQLVMs) {
-    Invoke-LabCommand -ComputerName $SQLVM -ActivityName 'Install dbatools' -ScriptBlock {
+    Invoke-LabCommand -ComputerName $SQLVM -ActivityName 'Install NTFSAccess' -ScriptBlock {
         if (-not (Get-Module -Name '*PSResourceGet' -ListAvailable)) {
             Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201
-            Install-Module -Name dbatools -Force -Scope AllUsers -SkipPublisherCheck
+            Install-Module -Name NTFSSecurity -Force -Scope AllUsers -SkipPublisherCheck
         } else {
-            Install-PSResource -Name dbatools -TrustRepository -Scope AllUsers
+            Install-PSResource -Name NTFSSecurity -TrustRepository -Scope AllUsers
         }
     } -PassThru
 }

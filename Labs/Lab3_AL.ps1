@@ -154,25 +154,22 @@ $clusterRole = Get-LabMachineRoleDefinition -Role FailoverNode -Properties @{
     ClusterName = 'LAB3SQLCL'
     ClusterIP   = '192.168.3.200'
 }
-#$SqlRole = Get-LabMachineRoleDefinition -Role SQLServer2022 -Properties @{
-#    Features              = 'SQLEngine,Tools'
-#    SQLSvcAccount         = 'contoso\sqlsvc'
-#    SQLSvcPassword        = 'SomePass1'
-#    AgtSvcAccount         = 'contoso\sqlsvc'
-#    AgtSvcPassword        = 'SomePass1'
-#    AgtSvcStartupType     = 'Automatic'
-#    BrowserSvcStartupType = 'Automatic'
-#}
+$SqlRole = Get-LabMachineRoleDefinition -Role SQLServer2022 -Properties @{
+    Features              = 'SQLEngine,Tools'
+    SQLSvcAccount         = 'contoso\sqlsvc'
+    SQLSvcPassword        = 'SomePass1'
+    AgtSvcAccount         = 'contoso\sqlsvc'
+    AgtSvcPassword        = 'SomePass1'
+    AgtSvcStartupType     = 'Automatic'
+    BrowserSvcStartupType = 'Automatic'
+    InstanceName          = 'SQLAG'
+}
 $roles = @()
 $roles += $clusterRole
-#$roles += $SqlRole
+$roles += $SqlRole
 
 # Post Installation Activities
 $PostInstallActivities = @()
-#$SQLCU = Get-LabPostInstallationActivity -CustomRole InstallSQLServerCU -Properties @{
-#    KBUri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
-#    KBName = 'SQLServer2022-KB5032679-x64.exe'
-#}
 $PrepareDisksForS2D = Get-LabPostInstallationActivity -CustomRole PrepareDisksForS2D
 $ClusterCloudWitness = Get-LabPostInstallationActivity -CustomRole InstallClusterCloudWitness -Properties @{
     StorageAccountName = $SecretFile.Lab3.witnessStorageAccountName
@@ -200,10 +197,6 @@ $RestoreSampleDatabase = Get-LabPostInstallationActivity -CustomRole RestoreSamp
     DestinationFolderPath = '\\LAB3SQLSOF\Sources'
 }
 
-
-#$RestoreSampleDatabase = Get-LabPostInstallationActivity -CustomRole RestoreSampleDatabase -Properties @{
-#    DestinationFolderPath = '\\LAB3SQLSOF\Sources'
-#}
 #$PrepareSampleDatabaseForAG = Get-LabPostInstallationActivity -CustomRole PrepareSampleDatabaseForAG -Properties @{
 #    BackupPath = '\\LAB3SQLSOF\Backup_LAB3SQL1\'
 #}

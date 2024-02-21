@@ -21,21 +21,20 @@ param(
 
     [Parameter(Mandatory)]
     [string]
-    $SQLEngineAccountName,
-
-    [Parameter()]
-    [string]
-    $SQLInstance = 'MSSQLSERVER'
+    $SQLEngineAccountName
 )
 
 Import-Lab -Name $data.Name -NoValidation -NoDisplay
+
+$SQLServerVM = Get-LabVM -ComputerName $ComputerName
+$SQLInstanceName = $SQLServerVM.Roles.Properties.InstanceName
 
 $DCName = (Get-LabVM -Role RootDC | Select-Object -First 1).Name
 $DomainName = (Get-LabDomainDefinition).Name
 $AllSQLServers = Get-LabVM | Where-Object { $_.Roles.Name -like 'SQL*' -and $_.Roles.Name -eq 'FailOverNode' } | Select-Object -ExpandProperty Name
 $AGNodeNames = Get-LabVM | Where-Object { $_.Roles.Name -like 'SQL*' -and $_.Roles.Name -eq 'FailOverNode' } | Select-Object -ExpandProperty Name
 
-if(-not ($SQLInstance.ToUpper() -eq 'MSSQLSERVER')) {
+if(-not([string]::IsNullOrEmpty($SQLInstanceName))) {
     $AllSQLServers = $AllSQLServers.ForEach({ "$_\$SQLInstance" })
 }
 

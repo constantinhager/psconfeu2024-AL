@@ -9,10 +9,6 @@ param(
 
     [Parameter()]
     [string]
-    $SQLInstance = 'MSSQLSERVER',
-
-    [Parameter()]
-    [string]
     $DatabaseName = 'AdventureWorksLT2022',
 
     [Parameter()]
@@ -21,6 +17,9 @@ param(
 )
 
 Import-Lab -Name $data.Name -NoValidation -NoDisplay
+
+$SQLServerVM = Get-LabVM -ComputerName $ComputerName
+$SQLInstance = $SQLServerVM.Roles.Properties.InstanceName
 
 if (-not ($SQLInstance.ToUpper() -eq 'MSSQLSERVER')) {
     $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstance)
