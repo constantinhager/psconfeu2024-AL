@@ -48,19 +48,21 @@ Invoke-LabCommand -ComputerName $AGNodeNames -ActivityName "Enable AlwaysOn Avai
 
 foreach($SQLServer in $AGNodeNames) {
     Invoke-LabCommand -ComputerName $SQLServer -ActivityName "Setup AlwaysOn Availability Group Endpoint on $SQLServer" -ScriptBlock {
-        if (-not ($SQLInstance.ToUpper() -eq 'MSSQLSERVER')) {
-            $SQLServer = [string]::Concat($SQLServer, '\', $SQLInstance)
+        if ([string]::IsNullOrEmpty($SQLInstanceName)) {
+            $SQLInstance = $ComputerName
+        } else {
+            $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstanceName)
         }
 
         $Splat = @{
-            SqlInstance = $SQLServer
+            SqlInstance = $SQLInstance
             Name        = 'hadr_endpoint'
             Port        = $AGPort
         }
         New-DbaEndpoint @Splat | Start-DbaEndpoint | Format-Table
-        New-DbaLogin -SqlInstance $SQLServer -Login $SQLEngineAccountName | Format-Table
-        Invoke-DbaQuery -SqlInstance $SQLServer -Query "GRANT CONNECT ON ENDPOINT::hadr_endpoint TO [$SQLEngineAccountName]"
-    } -PassThru (Get-Variable -Name SQLServer), (Get-Variable -Name AGPort), (Get-Variable -Name SQLEngineAccountName), (Get-Variable -Name SQLInstance)
+        New-DbaLogin -SqlInstance $SQLInstance -Login $SQLEngineAccountName | Format-Table
+        Invoke-DbaQuery -SqlInstance $SQLInstance -Query "GRANT CONNECT ON ENDPOINT::hadr_endpoint TO [$SQLEngineAccountName]"
+    } -PassThru (Get-Variable -Name SQLServer), (Get-Variable -Name AGPort), (Get-Variable -Name SQLEngineAccountName), (Get-Variable -Name SQLInstanceName), (Get-Variable -Name ComputerName)
 }
 
 Invoke-LabCommand -ComputerName $ComputerName -ActivityName 'Create AlwaysOn Availability Group' -ScriptBlock {

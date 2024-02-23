@@ -63,11 +63,20 @@ function Test-PendingReboot {
 }
 
 foreach($SQLServer in $LABSQLServer) {
+
     # Test if reboot is required. If so, reboot the computer.
     if (Test-PendingReboot -ComputerName $SQLServer) {
         Write-ScreenInfo -Message "Reboot of $SQLServer is required before installing CU."
         Restart-LabVM -ComputerName $SQLServer -Wait
     }
+
+    # Check if every SQL Server service is running
+    Invoke-LabCommand -ComputerName $SQLServer -ActivityName 'Check if every SQL Server service is running. If not wait until they are started.' -ScriptBlock {
+        $services = Get-Service -Name '*SQL*'
+        foreach ($service in $services) {
+            $service.WaitForStatus('Running')
+        }
+    } -PassThru
 
     # Download the latest cumulative update for SQL Server
     Write-ScreenInfo -Message "Check if $KBName is already downloaded"
@@ -83,11 +92,11 @@ foreach($SQLServer in $LABSQLServer) {
     }
 
     # Upload to Computer $ComputerName
-    Write-ScreenInfo -Message "Uploading $KBName to $SQLServer"
+    Write-ScreenInfo -Message "Uploading $KBName to $DestinationFolderPath"
     Copy-LabFileItem -Path "$labSources\SoftwarePackages\$KBName" -DestinationFolderPath $DestinationFolderPath -ComputerName $SQLServer
 
     # Install the latest cumulative update for SQL Server
-    Invoke-LabCommand -ActivityName "Installing $KBName on $SQLServer" -ComputerName $SQLServer -ScriptBlock {
+    Invoke-LabCommand -ActivityName "Installing $KBName" -ComputerName $SQLServer -ScriptBlock {
         $KBNamePath = Join-Path -Path $DestinationFolderPath -ChildPath $KBName
         Update-DbaInstance -Path $KBNamePath -ExtractPath $DestinationFolderPath -Confirm:$false
     } -Variable (Get-Variable KBName), (Get-Variable -Name DestinationFolderPath) -PassThru
@@ -99,8 +108,8 @@ foreach($SQLServer in $LABSQLServer) {
     }
 
     # Check if every SQL Server service is running
-    Invoke-LabCommand -ComputerName $SQLServer -ActivityName 'Check if every SQL Server service is running. If not start them.' -ScriptBlock {
-        $services = Get-Service -Name '*SQL*' | Where-Object { $_.Name -ne 'SQLTELEMETRY' -and $_.Name -ne 'SQLWriter' }
+    Invoke-LabCommand -ComputerName $SQLServer -ActivityName 'Check if every SQL Server service is running. If not wait until they are started.' -ScriptBlock {
+        $services = Get-Service -Name '*SQL*'
         foreach ($service in $services) {
             $service.WaitForStatus('Running')
         }

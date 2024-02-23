@@ -4,19 +4,13 @@ param(
     $ComputerName,
 
     [Parameter(Mandatory)]
-    [string]
-    $SOFSName,
-
-    [Parameter(Mandatory)]
     [System.Object]
     $ClusterFolderAndShareDefinition
 )
 
 Import-Lab -Name $data.Name -NoValidation -NoDisplay
 
-Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Create Folders and Shares on Scale Out File Server $SOFSName" -ScriptBlock {
-
-    Move-ClusterGroup -Name $SOFSName -Node $ComputerName
+Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Create Folders and Shares" -ScriptBlock {
 
     foreach ($folder in $ClusterFolderAndShareDefinition) {
 
@@ -30,8 +24,7 @@ Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Create Folders and 
             Name       = $folder.Name
             Path       = $folder.Path
             FullAccess = $folder.FullAccess
-            ScopeName  = $SOFSName
         }
         New-SmbShare @splat
     }
-} -PassThru -Variable (Get-Variable -Name ComputerName), (Get-Variable -Name SOFSName), (Get-Variable -Name ClusterFolderAndShareDefinition)
+} -PassThru -Variable (Get-Variable -Name ClusterFolderAndShareDefinition)

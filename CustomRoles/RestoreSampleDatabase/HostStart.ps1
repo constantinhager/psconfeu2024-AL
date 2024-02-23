@@ -5,7 +5,11 @@ param(
 
     [Parameter()]
     [string]
-    $DestinationFolderPath = 'C:\SQLServerTestDB',
+    $CopyDestinationFolderPath = 'C:\SQLServerTestDB',
+
+    [Parameter(Mandatory)]
+    [string]
+    $RestoreFolderPath,
 
     [Parameter()]
     [string]
@@ -21,10 +25,10 @@ Import-Lab -Name $data.Name -NoValidation -NoDisplay
 $SQLServerVM = Get-LabVM -ComputerName $ComputerName
 $SQLInstance = $SQLServerVM.Roles.Properties.InstanceName
 
-if (-not ($SQLInstance.ToUpper() -eq 'MSSQLSERVER')) {
-    $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstance)
-} else {
+if ([string]::IsNullOrEmpty($SQLInstance)) {
     $SQLInstance = $ComputerName
+} else {
+    $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstance)
 }
 
 Write-ScreenInfo -Message "Downloading $DatabaseName database backup from $SampleDatabaseDownloadUri"
@@ -34,22 +38,22 @@ $Splat = @{
 }
 Get-LabInternetFile @splat
 
-Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Revert SQL Security Settings" -ScriptBlock {
+Invoke-LabCommand -ComputerName $ComputerName -ActivityName 'Revert SQL Security Settings' -ScriptBlock {
     Set-DbatoolsInsecureConnection
 } -PassThru
 
-Write-ScreenInfo -Message "Copying $DatabaseName database backup to $DestinationFolderPath"
+Write-ScreenInfo -Message "Copying $DatabaseName database backup to $CopyDestinationFolderPath"
 $splat = @{
     ComputerName          = $ComputerName
     Path                  = "$labSources\SoftwarePackages\$DatabaseName.bak"
-    DestinationFolderPath = $DestinationFolderPath
+    DestinationFolderPath = $CopyDestinationFolderPath
     PassThru              = $true
 }
 Copy-LabFileItem @splat
 
 Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Restore $DatabaseName" -ScriptBlock {
-    Restore-DbaDatabase -SqlInstance $SQLInstance -Path $DestinationFolderPath -DatabaseName $DatabaseName
-} -PassThru -Variable (Get-Variable -Name SQLInstance), (Get-Variable -Name DestinationFolderPath), (Get-Variable -Name DatabaseName)
+    Restore-DbaDatabase -SqlInstance $SQLInstance -Path $RestoreFolderPath -DatabaseName $DatabaseName
+} -PassThru -Variable (Get-Variable -Name SQLInstance), (Get-Variable -Name RestoreFolderPath), (Get-Variable -Name DatabaseName)
 
 Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Change Recovery Model to Full on $DatabaseName" -ScriptBlock {
     Set-DbaDbRecoveryModel -SqlInstance $SQLInstance -Database $DatabaseName -RecoveryModel Full -Confirm:$false
