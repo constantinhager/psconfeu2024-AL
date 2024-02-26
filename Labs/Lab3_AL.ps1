@@ -189,23 +189,32 @@ $FoldersAndShares = Get-LabPostInstallationActivity -CustomRole InstallScaleOutF
 }
 $PResourceGet = Get-LabPostInstallationActivity -CustomRole InstallPSResourceGet
 $DBATools = Get-LabPostInstallationActivity -CustomRole InstallDBATools
+$NTFSSecurity = Get-LabPostInstallationActivity -CustomRole InstallNTFSSecurity
+$SQLAccountPermissions = Get-LabPostInstallationActivity -CustomRole SetSQLServiceAccountPermissions -Properties @{
+    ClusterFolderAndShareDefinition = $ClusterFolderAndShareDefinition
+}
 $SQLCU = Get-LabPostInstallationActivity -CustomRole InstallSQLServerCU -Properties @{
-    KBUri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
-    KBName = 'SQLServer2022-KB5032679-x64.exe'
+    KBUri                 = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
+    KBName                = 'SQLServer2022-KB5032679-x64.exe'
+    DestinationFolderPath = 'C:\ClusterStorage\SQLSources\Shares\Sources'
+}
+$SQLServerSettings = Get-LabPostInstallationActivity -CustomRole ChangeSQLServerSettings -Properties @{
+    ClusterFolderAndShareDefinition = $ClusterFolderAndShareDefinition
+    FileServerName                  = 'LAB3SQLSOF'
 }
 $RestoreSampleDatabase = Get-LabPostInstallationActivity -CustomRole RestoreSampleDatabase -Properties @{
-    DestinationFolderPath = '\\LAB3SQLSOF\Sources'
+    CopyDestinationFolderPath = 'C:\ClusterStorage\SQLSources\Shares\Sources\BAKFiles'
+    RestoreFolderPath         = '\\LAB3SQLSOF\SQLSources\BAKFiles'
 }
-
-#$PrepareSampleDatabaseForAG = Get-LabPostInstallationActivity -CustomRole PrepareSampleDatabaseForAG -Properties @{
-#    BackupPath = '\\LAB3SQLSOF\Backup_LAB3SQL1\'
-#}
-#$CreateAG = Get-LabPostInstallationActivity -CustomRole CreateAlwaysOnAvailabilityGroup -Properties @{
-#    AGName               = 'LAB3SQLAG'
-#    AGDatabase           = 'AdventureWorksLT2022'
-#    AGIPAddress          = '192.168.3.201'
-#    SQLEngineAccountName = 'contoso\sqlsvc'
-#}
+$PrepareSampleDatabaseForAG = Get-LabPostInstallationActivity -CustomRole PrepareSampleDatabaseForAG -Properties @{
+    BackupPath = '\\LAB3SQLSOF\Backup_LAB3SQL1\'
+}
+$CreateAG = Get-LabPostInstallationActivity -CustomRole CreateAlwaysOnAvailabilityGroup -Properties @{
+    AGName               = 'LAB3SQLAG'
+    AGDatabase           = 'AdventureWorksLT2022'
+    AGIPAddress          = '192.168.3.201'
+    SQLEngineAccountName = 'contoso\sqlsvc'
+}
 
 $PostInstallActivities += $PrepareDisksForS2D
 $PostInstallActivities += $ClusterCloudWitness
@@ -215,10 +224,13 @@ $PostInstallActivities += $ScaleOutFileServer
 $PostInstallActivities += $FoldersAndShares
 $PostInstallActivities += $PResourceGet
 $PostInstallActivities += $DBATools
+$PostInstallActivities += $NTFSSecurity
+$PostInstallActivities += $SQLAccountPermissions
 $PostInstallActivities += $SQLCU
+$PostInstallActivities += $SQLServerSettings
 $PostInstallActivities += $RestoreSampleDatabase
-#$PostInstallActivities += $PrepareSampleDatabaseForAG
-#$PostInstallActivities += $CreateAG
+$PostInstallActivities += $PrepareSampleDatabaseForAG
+$PostInstallActivities += $CreateAG
 
 # SQL Server 1, Failover Cluster Node
 $splat = @{

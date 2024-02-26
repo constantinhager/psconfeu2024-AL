@@ -15,39 +15,39 @@ param(
 Import-Lab -Name $data.Name -NoValidation -NoDisplay
 
 $SQLServerVM = Get-LabVM -ComputerName $ComputerName
-$SQLInstanceName = $SQLServerVM.Roles.Properties.InstanceName
+$LABSQLInstanceName = $SQLServerVM.Roles.Properties.InstanceName
 
-$SecondSQLServer = Get-LabVM | Where-Object { $_.Roles.Name -like 'SQL*' -and $_.Name -ne "$ComputerName" } | Select-Object -ExpandProperty Name
+$SecondSQLServer = (Get-LabVM -Role SQLServer | Where-Object { $_.Name -ne "$ComputerName" }).Name
 
 if ([string]::IsNullOrEmpty($SecondSQLServer)) {
     Write-ScreenInfo -Message 'No second SQL Server found'
     return
 }
 
-if ([string]::IsNullOrEmpty($SQLInstance)) {
-    $SQLInstance = $ComputerName
-    $SecondSQLInstance = $SecondSQLServer
+if ([string]::IsNullOrEmpty($LABSQLInstanceName)) {
+    $SQLInstanceName = $ComputerName
+    $SecondSQLInstanceName = $SecondSQLServer
 } else {
-    $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstanceName)
-    $SecondSQLInstance = [string]::Concat($SecondSQLServer, '\', $SQLInstanceName)
+    $SQLInstanceName = [string]::Concat($ComputerName, '\', $LABSQLInstanceName)
+    $SecondSQLInstanceName = [string]::Concat($SecondSQLServer, '\', $LABSQLInstanceName)
 }
 
 foreach ($vm in $SecondSQLServer) {
     Invoke-LabCommand -ComputerName $ComputerName -ActivityName "Backup $DatabaseName on $ComputerName and restore it to $vm" -ScriptBlock {
         $splat = @{
-            SqlInstance = $SQLInstance
+            SqlInstance = $SQLInstanceName
             Database    = $DatabaseName
             Path        = $BackupPath
             Type        = 'Database'
         }
-        Backup-DbaDatabase @splat | Restore-DbaDatabase -SqlInstance $SecondSQLInstance -NoRecovery
+        Backup-DbaDatabase @splat | Restore-DbaDatabase -SqlInstance $SecondSQLInstanceName -NoRecovery
 
         $splat = @{
-            SqlInstance = $ComputerName
+            SqlInstance = $SQLInstanceName
             Database    = $DatabaseName
             Path        = $BackupPath
             Type        = 'Log'
         }
-        Backup-DbaDatabase @splat | Restore-DbaDatabase -SqlInstance $SecondSQLInstance -Continue -NoRecovery
-    } -PassThru -Variable (Get-Variable -Name ComputerName), (Get-Variable -Name BackupPath), (Get-Variable -Name vm), (Get-Variable -Name DatabaseName) , (Get-Variable -Name SQLInstance), (Get-Variable -Name SecondSQLInstance)
+        Backup-DbaDatabase @splat | Restore-DbaDatabase -SqlInstance $SecondSQLInstanceName -Continue -NoRecovery
+    } -PassThru -Variable (Get-Variable -Name DatabaseName), (Get-Variable -Name SQLInstanceName), (Get-Variable -Name SecondSQLInstanceName)
 }

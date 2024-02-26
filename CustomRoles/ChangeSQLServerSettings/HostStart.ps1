@@ -22,15 +22,15 @@ if(-not($PSBoundParameters.ContainsKey('FileServerName'))) {
 
 foreach ($VM in $SQLVMs) {
 
+    $VMName = $VM.Name
     $SQLInstance = $VM.Roles.Properties.InstanceName
 
     if ([string]::IsNullOrEmpty($SQLInstance)) {
-        $SQLInstance = $ComputerName
+        $SQLInstance = $VMName
     } else {
-        $SQLInstance = [string]::Concat($ComputerName, '\', $SQLInstance)
+        $SQLInstance = [string]::Concat($VMName, '\', $SQLInstance)
     }
 
-    $VMName = $VM.Name
     $DataPath = $ClusterFolderAndShareDefinition.Where({ $_.Name -like "*Data*$VMName" }).Path
     $DataPathFolderName = $DataPath.Split('\')[-1]
     $DataPathNetworkShare = [System.IO.Path]::Combine("\\$FileServerName", $DataPathFolderName)
