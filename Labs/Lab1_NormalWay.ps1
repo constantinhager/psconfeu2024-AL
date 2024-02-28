@@ -17,6 +17,10 @@
 #>
 
 $labName = 'LAB1'
+$SecretFile = Import-PowerShellDataFile -Path E:\GIT\psconfeu2024-AL\.secrets.psd1
+$witnessSAName = $SecretFile.Lab1.witnessStorageAccountName
+$witnessSAAccessKey = $SecretFile.Lab1.witnessStorageAccountKey
+
 New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV
 
 $PSDefaultParameterValues = @{
@@ -35,7 +39,13 @@ $splat = @{
 Add-LabVirtualNetworkDefinition @splat
 
 # Domain Controller
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab1' -UseDhcp -MacAddress '0017fb000003'
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab1'
+    Ipv4Address    = '192.168.1.10'
+    Ipv4Gateway    = '192.168.1.1'
+    Ipv4DNSServers = '192.168.1.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
 $splat = @{
     Name            = 'LAB1DC'
     OperatingSystem = 'Windows Server 2022 Datacenter'
@@ -47,18 +57,49 @@ $splat = @{
 Add-LabMachineDefinition @splat
 
 # SQL Server 1
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab1' -UseDhcp -MacAddress '0017fb000009'
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab1'
+    Ipv4Address    = '192.168.1.11'
+    Ipv4Gateway    = '192.168.1.1'
+    Ipv4DNSServers = '192.168.1.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
 Add-LabDiskDefinition -Name Lab1SQL1DataDrive1 -DiskSizeInGb 100
 Add-LabDiskDefinition -Name Lab1SQL1DataDrive2 -DiskSizeInGb 100
-Add-LabMachineDefinition -Name LAB1SQL1 -Processors 2 -NetworkAdapter $netAdapter -DiskName 'Lab1SQL1DataDrive1', 'Lab1SQL1DataDrive2'
+$splat = @{
+    Name           = 'LAB1SQL1'
+    Processors     = 2
+    NetworkAdapter = $netAdapter
+    DiskName       = 'Lab1SQL1DataDrive1', 'Lab1SQL1DataDrive2'
+}
+Add-LabMachineDefinition @splat
 
 # SQL Server 2
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab1' -UseDhcp -MacAddress '0017fb00000a'
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab1'
+    Ipv4Address    = '192.168.1.12'
+    Ipv4Gateway    = '192.168.1.1'
+    Ipv4DNSServers = '192.168.1.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
 Add-LabDiskDefinition -Name Lab1SQL2DataDrive1 -DiskSizeInGb 100
 Add-LabDiskDefinition -Name Lab1SQL2DataDrive2 -DiskSizeInGb 100
-Add-LabMachineDefinition -Name LAB1SQL2 -Processors 2 -NetworkAdapter $netAdapter -DiskName 'Lab1SQL2DataDrive1', 'Lab1SQL2DataDrive2'
+$splat = @{
+    Name           = 'LAB1SQL2'
+    Processors     = 2
+    NetworkAdapter = $netAdapter
+    DiskName       = 'Lab1SQL2DataDrive1', 'Lab1SQL2DataDrive2'
+}
+Add-LabMachineDefinition @splat
 
 Install-Lab
+
+# Wait for the PSRepository to be registered
+Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Return Registered Repositories' -ScriptBlock {
+    while ($null -eq (Get-PSRepository)) {
+        Start-Sleep -Seconds 5
+    }
+} -PassThru
 
 # Install PSResourceGet Module
 Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Install PSResourceGet Module' -ScriptBlock {
@@ -116,8 +157,8 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Create Cluster' -ScriptB
 
 # Configure the cluster quorum as cloud witness
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Configure Cluster Quorum' -ScriptBlock {
-    Set-ClusterQuorum -CloudWitness -AccountName lab1clwidness -AccessKey '<YourAccessKey>'
-} -PassThru
+    Set-ClusterQuorum -CloudWitness -AccountName $witnessSAName -AccessKey $witnessSAAccessKey
+} -PassThru -Variable (Get-Variable -Name witnessSAName), (Get-Variable -Name witnessSAAccessKey)
 
 # Enable storage spaces direct
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Enable Storage Spaces Direct' -ScriptBlock {
@@ -222,6 +263,10 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Install SQL Server 2022'
     $AgentCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
     $AdminCredential = New-Object System.Management.Automation.PSCredential ('contoso\Administrator', (ConvertTo-SecureString 'Somepass1' -AsPlainText -Force))
 
+    $config = @{
+        BROWSERSVCSTARTUPTYPE = 'Automatic'
+    }
+
     $Splat = @{
         SQLInstance      = 'LAB1SQL1'
         Version          = '2022'
@@ -232,6 +277,7 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Install SQL Server 2022'
         DataPath         = '\\LAB1SQLSOF\Data_LAB1SQL1'
         LogPath          = '\\LAB1SQLSOF\Log_LAB1SQL1'
         BackupPath       = '\\LAB1SQLSOF\Backup_LAB1SQL1'
+        Configuration    = $config
         EngineCredential = $EngineCredential
         AgentCredential  = $AgentCredential
         Authentication   = 'Credssp'
@@ -258,6 +304,19 @@ Write-ScreenInfo -Message 'Restarting LAB1SQL1' -TaskStart
 Restart-LabVM -ComputerName LAB1SQL1 -Wait -ProgressIndicator 5
 Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL1' -TaskEnd
 
+# Check if every SQL Server service is running on LAB1SQL1.
+Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Check if every SQL Server service is running. If not wait until they are started.' -ScriptBlock {
+    $services = Get-Service -Name '*SQL*'
+    foreach ($service in $services) {
+        $service.WaitForStatus('Running')
+    }
+} -PassThru
+
+# Enable AlwaysOn Availability Groups on LAB1SQL1
+Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Enable AlwaysOn Availability Groups' -ScriptBlock {
+    Enable-DbaAgHadr -SqlInstance LAB1SQL1 -Force
+} -PassThru
+
 # Mount sql server 2022 iso on LAB1SQL2
 $Info = Mount-LabIsoImage -ComputerName LAB1SQL2 -IsoPath "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso" -PassThru
 $DriveLetter = $Info.DriveLetter
@@ -269,6 +328,10 @@ Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Install SQL Server 2022'
     $AgentCredential = New-Object System.Management.Automation.PSCredential ('contoso\SQLSvc', (ConvertTo-SecureString 'SomePass1' -AsPlainText -Force))
     $AdminCredential = New-Object System.Management.Automation.PSCredential ('contoso\Administrator', (ConvertTo-SecureString 'Somepass1' -AsPlainText -Force))
 
+    $config = @{
+        BROWSERSVCSTARTUPTYPE = 'Automatic'
+    }
+
     $Splat = @{
         SQLInstance      = 'LAB1SQL2'
         Version          = '2022'
@@ -279,6 +342,7 @@ Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Install SQL Server 2022'
         DataPath         = '\\LAB1SQLSOF\Data_LAB1SQL2'
         LogPath          = '\\LAB1SQLSOF\Log_LAB1SQL2'
         BackupPath       = '\\LAB1SQLSOF\Backup_LAB1SQL2'
+        Configuration    = $config
         EngineCredential = $EngineCredential
         AgentCredential  = $AgentCredential
         Authentication   = 'Credssp'
@@ -305,6 +369,19 @@ Write-ScreenInfo -Message 'Restarting LAB1SQL2' -TaskStart
 Restart-LabVM -ComputerName LAB1SQL2 -Wait -ProgressIndicator 5
 Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL2' -TaskEnd
 
+# Check if every SQL Server service is running on LAB1SQL2.
+Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Check if every SQL Server service is running. If not wait until they are started.' -ScriptBlock {
+    $services = Get-Service -Name '*SQL*'
+    foreach ($service in $services) {
+        $service.WaitForStatus('Running')
+    }
+} -PassThru
+
+# Enable AlwaysOn Availability Groups on LAB1SQL2
+Invoke-LabCommand -ComputerName LAB1SQL2 -ActivityName 'Enable AlwaysOn Availability Groups' -ScriptBlock {
+    Enable-DbaAgHadr -SqlInstance LAB1SQL2 -Force
+} -PassThru
+
 # Revert the SQL Security settings
 Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Revert SQL Security Settings' -ScriptBlock {
     Set-DbatoolsInsecureConnection
@@ -318,11 +395,6 @@ Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Restore AdventureWorksLT
 # Change recovery model to full on AdventureWorksLT2022 on LAB1SQL1
 Invoke-LabCommand -ComputerName LAB1SQL1 -ActivityName 'Change Recovery Model to Full on AdventureWorksLT2022' -ScriptBlock {
     Set-DbaDbRecoveryModel -SqlInstance LAB1SQL1 -Database AdventureWorksLT2022 -RecoveryModel Full -Confirm:$false
-} -PassThru
-
-# Enable AlwaysOn Availability Groups on LAB1SQL1, LAB1SQL2
-Invoke-LabCommand -ComputerName LAB1SQL1, LAB1SQL2 -ActivityName 'Enable AlwaysOn Availability Groups' -ScriptBlock {
-    Enable-DbaAgHadr -SqlInstance LAB1SQL1, LAB1SQL2 -Force
 } -PassThru
 
 # Setup AlwaysOn Availability Group endpoint on LAB1SQL1

@@ -129,7 +129,6 @@ $splat = @{
 Add-LabVirtualNetworkDefinition @splat
 
 # Domain Controller
-#$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab3' -UseDhcp -MacAddress '0017fb000005'
 $splat = @{
     VirtualSwitch  = 'NATSwitchLab3'
     Ipv4Address    = '192.168.3.10'
