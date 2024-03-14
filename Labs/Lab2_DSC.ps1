@@ -18,6 +18,8 @@
 
 $labName = 'LAB2'
 New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV
+$SecretFile = Import-PowerShellDataFile -Path E:\GIT\psconfeu2024-AL\.secrets.psd1
+$ConfigData = Import-PowerShellDataFile -Path E:\GIT\psconfeu2024-AL\DSC\ConfigurationData.psd1
 
 $PSDefaultParameterValues = @{
     'Add-LabMachineDefinition:Network'         = 'NATSwitchLab2'
@@ -35,25 +37,109 @@ $splat = @{
 Add-LabVirtualNetworkDefinition @splat
 
 # Domain Controller
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab2' -UseDhcp -MacAddress '0017fb000004'
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab2'
+    Ipv4Address    = '192.168.2.10'
+    Ipv4Gateway    = '192.168.2.1'
+    Ipv4DNSServers = '192.168.2.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
 $splat = @{
     Name            = 'LAB2DC'
     OperatingSystem = 'Windows Server 2022 Datacenter'
     Processors      = 1
-    Roles           = 'RootDC'
     NetworkAdapter  = $netAdapter
+    Roles           = 'RootDC'
     Memory          = 2GB
 }
 Add-LabMachineDefinition @splat
 
 # SQL Server 1
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab2' -UseDhcp -MacAddress '0017fb00000b'
-Add-LabMachineDefinition -Name LAB2SQL1 -Processors 2 -NetworkAdapter $netAdapter
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab2'
+    Ipv4Address    = '192.168.2.11'
+    Ipv4Gateway    = '192.168.2.1'
+    Ipv4DNSServers = '192.168.2.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
+Add-LabDiskDefinition -Name Lab2SQL1DataDrive1 -DiskSizeInGb 100
+Add-LabDiskDefinition -Name Lab2SQL1DataDrive2 -DiskSizeInGb 100
+$splat = @{
+    Name                     = 'LAB2SQL1'
+    Processors               = 2
+    NetworkAdapter           = $netAdapter
+    Roles                    = $roles
+    DiskName                 = 'Lab2SQL1DataDrive1', 'Lab2SQL1DataDrive2'
+    PostInstallationActivity = $PostInstallActivities
+}
+Add-LabMachineDefinition @splat
 
 # SQL Server 2
-$netAdapter = New-LabNetworkAdapterDefinition -VirtualSwitch 'NATSwitchLab2' -UseDhcp -MacAddress '0017fb00000c'
-Add-LabMachineDefinition -Name LAB2SQL2 -Processors 2 -NetworkAdapter $netAdapter
+$splat = @{
+    VirtualSwitch  = 'NATSwitchLab2'
+    Ipv4Address    = '192.168.2.12'
+    Ipv4Gateway    = '192.168.2.1'
+    Ipv4DNSServers = '192.168.2.10', '168.63.129.16'
+}
+$netAdapter = New-LabNetworkAdapterDefinition @splat
+Add-LabDiskDefinition -Name Lab2SQL2DataDrive1 -DiskSizeInGb 100
+Add-LabDiskDefinition -Name Lab2SQL2DataDrive2 -DiskSizeInGb 100
+$splat = @{
+    Name           = 'LAB2SQL2'
+    Processors     = 2
+    NetworkAdapter = $netAdapter
+    Roles          = $roles
+    DiskName       = 'Lab2SQL2DataDrive1', 'Lab2SQL2DataDrive2'
+}
+Add-LabMachineDefinition @splat
 
 Install-Lab
 
-Show-LabDeploymentSummary
+# Install PSDesiredStateConfiguration and ActiveDirectory DSC Resource
+Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
+Install-Module -Name DNSServerDSC -Force -SkipPublisherCheck
+Install-Module -Name ComputerManagementDsc -Force -SkipPublisherCheck
+Install-Module -Name FailoverClusterDSC -Force -SkipPublisherCheck
+
+# LAB2DC
+. E:\GIT\psconfeu2024-AL\DSC\LAB2DC\LAB2DC.ps1
+$splat = @{
+    TypeName     = 'System.Management.Automation.PSCredential'
+    ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.SQLSVCUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.SQLSvcPassword -AsPlainText -Force)
+}
+$SQLSVCCredential = New-Object @splat
+Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2DC) -ComputerName LAB2DC -ConfigurationData $ConfigData -Wait -Force -Parameter @{
+    SQLSVCCredential = $SQLSVCCredential
+}
+
+# LAB2SQL1 Create Cluster
+. E:\GIT\psconfeu2024-AL\DSC\LAB2SQL1\LAB2SQL1_CreateCluster.ps1
+
+$splat = @{
+    TypeName     = 'System.Management.Automation.PSCredential'
+    ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.DomainAdminCredentialUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.DomainAdminCredentialPassword -AsPlainText -Force)
+}
+$ActiveDirectoryAdministratorCredential = New-Object @splat
+
+Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2SQL1_CreateCluster) -ComputerName LAB2SQL1 -ConfigurationData $ConfigData -Wait -Force -Parameter @{
+    ActiveDirectoryAdministratorCredential = $ActiveDirectoryAdministratorCredential
+    ClusterName                            = $SecretFile.Lab2.ClusterName
+    ClusterIPAddress                       = $SecretFile.Lab2.ClusterIPAddress
+    StorageAccountName                     = $SecretFile.Lab2.witnessStorageAccountName
+    StorageAccountAccessKey                = $SecretFile.Lab2.witnessStorageAccountKey
+}
+
+# LAB2SQL2 Join Cluster
+. E:\GIT\psconfeu2024-AL\DSC\LAB2SQL2\LAB2SQL2_JoinCluster.ps1
+
+$splat = @{
+    TypeName     = 'System.Management.Automation.PSCredential'
+    ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.DomainAdminCredentialUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.DomainAdminCredentialPassword -AsPlainText -Force)
+}
+$ActiveDirectoryAdministratorCredential = New-Object @splat
+
+Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2SQL2_JoinCluster) -ComputerName LAB2SQL2 -ConfigurationData $ConfigData -Wait -Force -Parameter @{
+    ActiveDirectoryAdministratorCredential = $ActiveDirectoryAdministratorCredential
+    ClusterName                            = $SecretFile.Lab2.ClusterName
+    ClusterIPAddress                       = $SecretFile.Lab2.ClusterIPAddress
+}
