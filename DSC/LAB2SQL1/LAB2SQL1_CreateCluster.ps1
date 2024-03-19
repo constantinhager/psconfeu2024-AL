@@ -24,6 +24,7 @@ Configuration LAB2SQL1_CreateCluster {
     )
 
     Import-DscResource -ModuleName 'FailoverClusterDSC'
+    Import-DscResource -ModuleName 'CHStorageSpacesDirectDsc'
 
     node 'localhost' {
 
@@ -61,6 +62,16 @@ Configuration LAB2SQL1_CreateCluster {
             Type                    = 'NodeAndCloudMajority'
             Resource                = $StorageAccountName
             StorageAccountAccessKey = $StorageAccountAccessKey
+        }
+
+        $DiskInfo = Invoke-LabCommand -ComputerName LAB2SQL2 -ScriptBlock {
+            Get-Disk | Where-Object Number -NE $null | Where-Object IsBoot -NE $true | Where-Object IsSystem -NE $true | Where-Object PartitionStyle -NE RAW
+        } -PassThru -NoDisplay
+
+        foreach ($disk in $DiskInfo) {
+            StorageSpacesDirectVolume $disk.Number {
+                DiskNumber = $disk.Number
+            }
         }
     }
 }

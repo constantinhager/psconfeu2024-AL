@@ -15,6 +15,7 @@ Configuration LAB2SQL2_JoinCluster {
     )
 
     Import-DscResource -ModuleName 'FailoverClusterDSC'
+    Import-DscResource -ModuleName 'CHStorageSpacesDirectDsc'
 
     Node 'localhost' {
         WindowsFeature AddFailoverFeature {
@@ -52,6 +53,16 @@ Configuration LAB2SQL2_JoinCluster {
             DomainAdministratorCredential = $ActiveDirectoryAdministratorCredential
             StaticIPAddress               = $ClusterIPAddress
             DependsOn                     = '[WaitForCluster]WaitForCluster'
+        }
+
+        $DiskInfo = Invoke-LabCommand -ComputerName LAB2SQL2 -ScriptBlock {
+            Get-Disk | Where-Object Number -NE $null | Where-Object IsBoot -NE $true | Where-Object IsSystem -NE $true | Where-Object PartitionStyle -NE RAW
+        } -PassThru -NoDisplay
+
+        foreach ($disk in $DiskInfo) {
+            StorageSpacesDirectVolume $disk.Number {
+                DiskNumber = $disk.Number
+            }
         }
     }
 }
