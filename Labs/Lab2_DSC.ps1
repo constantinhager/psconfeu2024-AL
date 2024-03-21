@@ -95,6 +95,28 @@ Add-LabMachineDefinition @splat
 
 Install-Lab
 
+# Download SQL Server 2022 current Cumulative Update
+$splat = @{
+    Uri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
+    Path = "$labSources\SoftwarePackages\SQLServer2022-KB5032679-x64.exe"
+}
+Get-LabInternetFile @splat
+
+# Download SQL Server SSMS
+$Splat = @{
+    Uri  = Get-PSFConfigValue -FullName 'AutomatedLab.Sql2022ManagementStudio'
+    Path = "$labSources\SoftwarePackages\SSMS-Setup-ENU.exe"
+}
+Get-LabInternetFile @splat
+
+# Download SQL Server AdventureWorks Sample Database
+$Splat = @{
+    Uri  = 'https://github.com/Microsoft/sql-server-samples/releases/download/adventureworks/AdventureWorksLT2022.bak'
+    Path = "$labSources\SoftwarePackages\AdventureWorksLT2022.bak"
+}
+Get-LabInternetFile @splat
+
+
 # Install PSDesiredStateConfiguration and ActiveDirectory DSC Resource
 Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
 Install-Module -Name DNSServerDSC -Force -SkipPublisherCheck
