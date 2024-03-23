@@ -116,12 +116,70 @@ $Splat = @{
 }
 Get-LabInternetFile @splat
 
+$splat = @{
+    ComputerName          = 'LAB2SQL1'
+    Path                  = "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL1'
+    Path                  = "$labSources\SoftwarePackages\SQLServer2022-KB5032679-x64.exe"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL1'
+    Path                  = "$labSources\SoftwarePackages\SSMS-Setup-ENU.exe"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL1'
+    Path                  = "$labSources\SoftwarePackages\AdventureWorksLT2022.bak"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL2'
+    Path                  = "$labSources\ISOs\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL2'
+    Path                  = "$labSources\SoftwarePackages\SQLServer2022-KB5032679-x64.exe"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
+$splat = @{
+    ComputerName          = 'LAB2SQL2'
+    Path                  = "$labSources\SoftwarePackages\SSMS-Setup-ENU.exe"
+    DestinationFolderPath = 'C:\Sources'
+    PassThru              = $true
+}
+Copy-LabFileItem @splat
+
 
 # Install PSDesiredStateConfiguration and ActiveDirectory DSC Resource
 Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
 Install-Module -Name DNSServerDSC -Force -SkipPublisherCheck
 Install-Module -Name ComputerManagementDsc -Force -SkipPublisherCheck
 Install-Module -Name FailoverClusterDSC -Force -SkipPublisherCheck
+Install-Module -Name SqlServerDsc -Force -SkipPublisherCheck
+Install-Module -Name StorageDsc -Force -SkipPublisherCheck
 
 # LAB2DC
 . E:\GIT\psconfeu2024-AL\DSC\LAB2DC\LAB2DC.ps1

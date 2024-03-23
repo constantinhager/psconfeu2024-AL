@@ -7,6 +7,10 @@ Configuration CreateCluster {
         $ActiveDirectoryAdministratorCredential,
 
         [Parameter(Mandatory)]
+        [pscredential]
+        $SQLCredential,
+
+        [Parameter(Mandatory)]
         [string]
         $ClusterName,
 
@@ -27,6 +31,8 @@ Configuration CreateCluster {
     Import-DscResource -ModuleName 'ComputerManagementDsc'
     Import-DscResource -ModuleName 'CHStorageSpacesDirectDsc'
     Import-DscResource -ModuleName 'CHScaleOutFileServerDsc'
+    Import-DscResource -ModuleName 'SqlServerDsc'
+    Import-DscResource -ModuleName 'StorageDsc'
 
     node $AllNodes.Where({ $_.Role -eq 'FirstNode' }).NodeName {
 
@@ -84,7 +90,117 @@ Configuration CreateCluster {
                 DependsOn  = '[ClusterQuorum]SQLClusterQuorum'
             }
         }
+
+        WaitForScaleoutFileServer LAB2SQLSOF {
+            Name             = $Node.SOFSName
+            RetryIntervalSec = 10
+            RetryCount       = 60
+        }
+
+        File Data_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Data1
+            Type            = 'Directory'
+            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Data_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Data_LAB2SQL1'
+            Path       = $Node.Data1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Data_LAB2SQL1'
+        }
+
+        File Log_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Log1
+            Type            = 'Directory'
+            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Log_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Log_LAB2SQL1'
+            Path       = $Node.Log1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Log_LAB2SQL1'
+        }
+
+        File Backup_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Backup1
+            Type            = 'Directory'
+            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Backup_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Backup_LAB2SQL1'
+            Path       = $Node.Backup1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Backup_LAB2SQL1'
+        }
+
+        PendingReboot Reboot {
+            Name      = 'Reboot test before SQL Server installation'
+            DependsOn = @(
+                '[SmbShare]Data_LAB2SQL1',
+                '[SmbShare]Log_LAB2SQL1',
+                '[SmbShare]Backup_LAB2SQL1'
+            )
+        }
+
+        # TODO: Install PowerShellGet 2.2.5
+
+        MountImage SQLServer {
+            ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
+            DriveLetter = 'D'
+            DependsOn   = '[PendingReboot]Reboot'
+        }
+
+        WaitForVolume WaitForISO {
+            DriveLetter      = 'D'
+            RetryIntervalSec = 5
+            RetryCount       = 10
+            DependsOn        = '[MountImage]SQLServer'
+        }
+
+        SqlSetup InstallInstanceSQL1 {
+            InstanceName          = $Node.SQLInstanceName
+            Features              = 'SQLENGINE'
+            SQLCollation          = $Node.SQLCollation
+            SQLSvcAccount         = $SQLCredential
+            AgtSvcAccount         = $SQLCredential
+            SQLSysAdminAccounts   = $Node.SQLSysAdminAccounts
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir           = 'C:\Program Files\Microsoft SQL Server'
+            SQLUserDBDir          = $Node.Data1
+            SQLUserDBLogDir       = $node.Log1
+            SQLTempDBDir          = $Node.Data1
+            SQLTempDBLogDir       = $Node.Log1
+            SQLBackupDir          = $Node.Backup1
+            SourcePath            = 'D:\'
+            UpdateEnabled         = 'False'
+            ForceReboot           = $false
+            SqlSvcStartupType     = 'Automatic'
+            BrowserSvcStartupType = 'Automatic'
+            AgtSvcStartupType     = 'Automatic'
+            PsDscRunAsCredential  = $ActiveDirectoryAdministratorCredential
+            DependsOn             = '[WaitForVolume]WaitForISO'
+        }
     }
+
 
     node $AllNodes.Where({ $_.Role -eq 'SecondNode' }).NodeName {
         WindowsFeature AddFileServerFeature {
@@ -184,7 +300,7 @@ Configuration CreateCluster {
 
         ScaleOutFileServer LAB2SQLSOF {
             IsSingleInstance     = 'Yes'
-            Name                 = 'LAB2SQLSOF'
+            Name                 = $Node.SOFSName
             Ensure               = 'Present'
             DependsOn            = @(
                 '[StorageSpacesDirectVolume]SQLData',
@@ -202,16 +318,16 @@ Configuration CreateCluster {
 
         File Data_LAB2SQL2 {
             Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLData\Shares\Data_LAB2SQL2'
-            Type            = 'Directory'
+            DestinationPath = $Node.Data2
+            type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
         SmbShare Data_LAB2SQL2 {
             Ensure     = 'Present'
             Name       = 'Data_LAB2SQL2'
-            Path       = 'C:\ClusterStorage\SQLData\Shares\Data_LAB2SQL2'
-            ScopeName  = 'LAB2SQLSOF'
+            Path       = $Node.Data2
+            ScopeName  = $Node.SOFSName
             FullAccess = @(
                 'Everyone'
             )
@@ -220,16 +336,16 @@ Configuration CreateCluster {
 
         File Log_LAB2SQL2 {
             Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLLog\Shares\Log_LAB2SQL2'
-            Type            = 'Directory'
+            DestinationPath = $Node.Log2
+            type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
         SmbShare Log_LAB2SQL2 {
             Ensure     = 'Present'
             Name       = 'Log_LAB2SQL2'
-            Path       = 'C:\ClusterStorage\SQLLog\Shares\Log_LAB2SQL2'
-            ScopeName  = 'LAB2SQLSOF'
+            Path       = $Node.Log2
+            ScopeName  = $Node.SOFSName
             FullAccess = @(
                 'Everyone'
             )
@@ -238,92 +354,86 @@ Configuration CreateCluster {
 
         File Backup_LAB2SQL2 {
             Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB2SQL2'
-            Type            = 'Directory'
+            DestinationPath = $Node.Backup2
+            type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
         SmbShare Backup_LAB2SQL2 {
             Ensure     = 'Present'
             Name       = 'Backup_LAB2SQL2'
-            Path       = 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB2SQL2'
-            ScopeName  = 'LAB2SQLSOF'
+            Path       = $Node.Backup2
+            ScopeName  = $Node.SOFSName
             FullAccess = @(
                 'Everyone'
             )
             DependsOn  = '[File]Backup_LAB2SQL2'
         }
 
-        File Data_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLData\Shares\Data_LAB2SQL1'
-            Type            = 'Directory'
-            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Data_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Data_LAB2SQL1'
-            Path       = 'C:\ClusterStorage\SQLData\Shares\Data_LAB2SQL1'
-            ScopeName  = 'LAB2SQLSOF'
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Data_LAB2SQL1'
-        }
-
-        File Log_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLLog\Shares\Log_LAB2SQL1'
-            Type            = 'Directory'
-            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Log_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Log_LAB2SQL1'
-            Path       = 'C:\ClusterStorage\SQLLog\Shares\Log_LAB2SQL1'
-            ScopeName  = 'LAB2SQLSOF'
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Log_LAB2SQL1'
-        }
-
-        File Backup_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB2SQL1'
-            Type            = 'Directory'
-            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Backup_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Backup_LAB2SQL1'
-            Path       = 'C:\ClusterStorage\SQLBackup\Shares\Backup_LAB2SQL1'
-            ScopeName  = 'LAB2SQLSOF'
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Backup_LAB2SQL1'
-        }
-
         File SQLSources {
             Ensure          = 'Present'
-            DestinationPath = 'C:\ClusterStorage\SQLSources\Shares\Sources'
-            Type            = 'Directory'
+            DestinationPath = $Node.Sources
+            type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
         SmbShare SQLSources {
             Ensure     = 'Present'
             Name       = 'SQLSources'
-            Path       = 'C:\ClusterStorage\SQLSources\Shares\Sources'
-            ScopeName  = 'LAB2SQLSOF'
+            Path       = $Node.Sources
+            ScopeName  = $Node.SOFSName
             FullAccess = @(
                 'Everyone'
             )
             DependsOn  = '[File]SQLSources'
+        }
+
+        PendingReboot Reboot {
+            Name      = 'Reboot test before SQL Server installation'
+            DependsOn = @(
+                '[SmbShare]Data_LAB2SQL2',
+                '[SmbShare]Log_LAB2SQL2',
+                '[SmbShare]Backup_LAB2SQL2',
+                '[SmbShare]SQLSources'
+            )
+        }
+
+        MountImage SQLServer {
+            ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
+            DriveLetter = 'D'
+            DependsOn   = '[PendingReboot]Reboot'
+        }
+
+        WaitForVolume WaitForISO {
+            DriveLetter      = 'D'
+            RetryIntervalSec = 5
+            RetryCount       = 10
+            DependsOn        = '[MountImage]SQLServer'
+        }
+
+        SqlSetup InstallInstanceSQL2 {
+            InstanceName          = $Node.SQLInstanceName
+            Features              = 'SQLENGINE'
+            SQLCollation          = $Node.SQLCollation
+            SQLSvcAccount         = $SQLCredential
+            AgtSvcAccount         = $SQLCredential
+            SQLSysAdminAccounts   = $Node.SQLSysAdminAccounts
+            InstallSharedDir      = 'C:\Program Files\Microsoft SQL Server'
+            InstallSharedWOWDir   = 'C:\Program Files (x86)\Microsoft SQL Server'
+            InstanceDir           = 'C:\Program Files\Microsoft SQL Server'
+            SQLUserDBDir          = $Node.Data2
+            SQLUserDBLogDir       = $node.Log2
+            SQLTempDBDir          = $Node.Data2
+            SQLTempDBLogDir       = $Node.Log2
+            SQLBackupDir          = $Node.Backup2
+            SourcePath            = 'D:\'
+            UpdateEnabled         = 'False'
+            ForceReboot           = $false
+            SqlSvcStartupType     = 'Automatic'
+            BrowserSvcStartupType = 'Automatic'
+            AgtSvcStartupType     = 'Automatic'
+            PsDscRunAsCredential  = $ActiveDirectoryAdministratorCredential
+            DependsOn             = '[WaitForVolume]WaitForISO'
         }
     }
 }
