@@ -84,3 +84,60 @@ class ScaleOutFileServer {
         Remove-ClusterResource -Name "$($State.Name)" -Force
     }
 }
+
+[DSCResource()]
+class WaitForScaleoutFileServer {
+    [DscProperty(Key)]
+    [string]
+    $Name
+
+    [DscProperty()]
+    [int]
+    $RetryIntervalSec = 30
+
+    [DscProperty()]
+    [int]
+    $RetryCount = 10
+
+    hidden
+    [WaitForScaleoutFileServer]
+    $CachedCurrentState
+
+    [WaitForScaleoutFileServer] Get() {
+        $CurrentState = [WaitForScaleoutFileServer]::new()
+        $CurrentState.Name = $this.Name
+        $CurrentState.RetryIntervalSec = $this.RetryIntervalSec
+        $CurrentState.RetryCount = $this.RetryCount
+
+        $this.CachedCurrentState = $CurrentState
+        return $CurrentState
+    }
+
+    [bool] Test() {
+        $CurrentState = $this.Get()
+
+        $SofsInfo = Get-ClusterGroup -Name "$($CurrentState.Name)" -ErrorAction SilentlyContinue
+
+        if ($null -ne $SofsInfo) {
+            return $true
+        } else {
+            return $false
+        }
+    }
+
+    [void] Set() {
+        if ($this.Test()) {
+            return
+        }
+
+        $CurrentState = $this.CachedCurrentState
+
+        For ($count = 0; $count -lt $CurrentState.RetryCount; $count++) {
+            $SofsInfo = Get-ClusterGroup -Name "$($CurrentState.Name)" -ErrorAction SilentlyContinue
+            if ($null -ne $SofsInfo) {
+                break
+            }
+            Start-Sleep -Seconds $CurrentState.RetryIntervalSec
+        }
+    }
+}
