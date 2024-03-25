@@ -172,6 +172,31 @@ $splat = @{
 }
 Copy-LabFileItem @splat
 
+$Splat = @{
+    LocalPath    = 'C:\Sources\SSMS-Setup-ENU.exe'
+    CommandLine  = '/install /passive /quiet /norestart'
+    ComputerName = 'LAB2SQL1'
+    PassThru     = $true
+}
+Install-LabSoftwarePackage @Splat
+
+$Splat = @{
+    LocalPath    = 'C:\Sources\SSMS-Setup-ENU.exe'
+    CommandLine  = '/install /passive /quiet /norestart'
+    ComputerName = 'LAB2SQL2'
+    PassThru     = $true
+}
+Install-LabSoftwarePackage @Splat
+
+# Restart LAB1SQL1
+Write-ScreenInfo -Message 'Restarting LAB1SQL1' -TaskStart
+Restart-LabVM -ComputerName LAB1SQL1 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL1' -TaskEnd
+
+# Restart LAB1SQL2
+Write-ScreenInfo -Message 'Restarting LAB1SQL2' -TaskStart
+Restart-LabVM -ComputerName Lab1SQL2 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL2' -TaskEnd
 
 # Install PSDesiredStateConfiguration and ActiveDirectory DSC Resource
 Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
@@ -181,6 +206,8 @@ Install-Module -Name FailoverClusterDSC -Force -SkipPublisherCheck
 Install-Module -Name SqlServerDsc -Force -SkipPublisherCheck
 Install-Module -Name StorageDsc -Force -SkipPublisherCheck
 
+Set-LabDscLocalConfigurationManagerConfiguration -ComputerName LAB2SQL1, LAB2SQL2 -RebootNodeIfNeeded $true
+
 # LAB2DC
 . E:\GIT\psconfeu2024-AL\DSC\LAB2DC\LAB2DC.ps1
 $splat = @{
@@ -188,12 +215,6 @@ $splat = @{
     ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.SQLSVCUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.SQLSvcPassword -AsPlainText -Force)
 }
 $SQLSVCCredential = New-Object @splat
-Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2DC) -ComputerName LAB2DC -ConfigurationData $ConfigData -Wait -Force -Parameter @{
-    SQLSVCCredential = $SQLSVCCredential
-}
-
-# LAB2SQL1 Create Cluster
-. E:\GIT\psconfeu2024-AL\DSC\LAB2SQL1\LAB2SQL1_CreateCluster.ps1
 
 $splat = @{
     TypeName     = 'System.Management.Automation.PSCredential'
@@ -201,25 +222,17 @@ $splat = @{
 }
 $ActiveDirectoryAdministratorCredential = New-Object @splat
 
-Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2SQL1_CreateCluster) -ComputerName LAB2SQL1 -ConfigurationData $ConfigData -Wait -Force -Parameter @{
+Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2DC) -ComputerName LAB2DC -ConfigurationData $ConfigData -Wait -Force -Parameter @{
+    SQLSVCCredential = $SQLSVCCredential
+}
+
+. E:\GIT\psconfeu2024-AL\DSC\CreateCluster.ps1
+
+Invoke-LabDscConfiguration -Configuration (Get-Command -Name CreateCluster) -ComputerName LAB2SQL1, LAB2SQL2 -ConfigurationData $ConfigData -Wait -Force -Parameter @{
     ActiveDirectoryAdministratorCredential = $ActiveDirectoryAdministratorCredential
     ClusterName                            = $SecretFile.Lab2.ClusterName
     ClusterIPAddress                       = $SecretFile.Lab2.ClusterIPAddress
     StorageAccountName                     = $SecretFile.Lab2.witnessStorageAccountName
     StorageAccountAccessKey                = $SecretFile.Lab2.witnessStorageAccountKey
-}
-
-# LAB2SQL2 Join Cluster
-. E:\GIT\psconfeu2024-AL\DSC\LAB2SQL2\LAB2SQL2_JoinCluster.ps1
-
-$splat = @{
-    TypeName     = 'System.Management.Automation.PSCredential'
-    ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.DomainAdminCredentialUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.DomainAdminCredentialPassword -AsPlainText -Force)
-}
-$ActiveDirectoryAdministratorCredential = New-Object @splat
-
-Invoke-LabDscConfiguration -Configuration (Get-Command -Name LAB2SQL2_JoinCluster) -ComputerName LAB2SQL2 -ConfigurationData $ConfigData -Wait -Force -Parameter @{
-    ActiveDirectoryAdministratorCredential = $ActiveDirectoryAdministratorCredential
-    ClusterName                            = $SecretFile.Lab2.ClusterName
-    ClusterIPAddress                       = $SecretFile.Lab2.ClusterIPAddress
+    SQLCredential                          = $SQLSVCCredential
 }
