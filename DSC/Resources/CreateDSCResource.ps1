@@ -23,3 +23,16 @@ $splat = @{
     ItemType = 'File'
 }
 New-Item @splat
+
+$ModuleSettings = @{
+    RootModule           = 'CHPSResourceGetDsc.psm1'
+    DscResourcesToExport = 'PSResourceGet'
+    Path                 = "$PSScriptRoot\CHPSResourceGetDsc\CHPSResourceGetDsc.psd1"
+}
+New-ModuleManifest @ModuleSettings
+
+$splat = @{
+    Path     = "$PSScriptRoot\CHPSResourceGetDsc\CHPSResourceGetDsc.psm1"
+    ItemType = 'File'
+}
+New-Item @splat
