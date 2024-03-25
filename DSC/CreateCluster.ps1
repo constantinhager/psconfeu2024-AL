@@ -31,6 +31,7 @@ Configuration CreateCluster {
     Import-DscResource -ModuleName 'ComputerManagementDsc'
     Import-DscResource -ModuleName 'CHStorageSpacesDirectDsc'
     Import-DscResource -ModuleName 'CHScaleOutFileServerDsc'
+    Import-DscResource -ModuleName 'CHPSResourceGetDsc'
     Import-DscResource -ModuleName 'SqlServerDsc'
     Import-DscResource -ModuleName 'StorageDsc'
 
@@ -160,12 +161,29 @@ Configuration CreateCluster {
             )
         }
 
-        # TODO: Install PowerShellGet 2.2.5
+        PSResourceRepository PSGallery {
+            Name      = 'PSGallery'
+            Ensure    = 'Present'
+            Default   = $true
+            DependsOn = '[PendingReboot]Reboot'
+        }
+
+        InstallPSResourceGet PSResourceGet {
+            IsSingleInstance = 'Yes'
+            Ensure           = 'Present'
+            DependsOn        = '[PSResourceRepository]PSGallery'
+        }
+
+        InstallPSResourceGetResource SqlServerModule {
+            Name      = 'SqlServer'
+            Ensure    = 'Present'
+            DependsOn = '[InstallPSResourceGet]PSResourceGet'
+        }
 
         MountImage SQLServer {
             ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
             DriveLetter = 'D'
-            DependsOn   = '[PendingReboot]Reboot'
+            DependsOn   = '[InstallPSResourceGetResource]SqlServerModule'
         }
 
         WaitForVolume WaitForISO {
@@ -198,6 +216,53 @@ Configuration CreateCluster {
             AgtSvcStartupType     = 'Automatic'
             PsDscRunAsCredential  = $ActiveDirectoryAdministratorCredential
             DependsOn             = '[WaitForVolume]WaitForISO'
+        }
+
+        PendingReboot RebootAfterSQL1 {
+            Name      = 'Reboot test before SQL Server installation'
+            DependsOn = @(
+                '[SqlSetup]InstallInstanceSQL1'
+            )
+        }
+
+        Service SQLBrowser {
+            Name      = 'SQLBrowser'
+            State     = 'Running'
+            DependsOn = @(
+                '[PendingReboot]RebootAfterSQL1'
+            )
+        }
+
+        Service SQLServerService {
+            Name      = 'MSSQLSERVER'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLBrowser'
+            )
+        }
+
+        Service SQLServerAgent {
+            Name      = 'SQLSERVERAGENT'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLServerService'
+            )
+        }
+
+        Service SQLTelemetry {
+            Name      = 'SQLTELEMETRY'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLServerAgent'
+            )
+        }
+
+        Service SQLWriter {
+            Name      = 'SQLWriter'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLTelemetry'
+            )
         }
     }
 
@@ -319,7 +384,7 @@ Configuration CreateCluster {
         File Data_LAB2SQL2 {
             Ensure          = 'Present'
             DestinationPath = $Node.Data2
-            type            = 'Directory'
+            Type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
@@ -337,7 +402,7 @@ Configuration CreateCluster {
         File Log_LAB2SQL2 {
             Ensure          = 'Present'
             DestinationPath = $Node.Log2
-            type            = 'Directory'
+            Type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
@@ -355,7 +420,7 @@ Configuration CreateCluster {
         File Backup_LAB2SQL2 {
             Ensure          = 'Present'
             DestinationPath = $Node.Backup2
-            type            = 'Directory'
+            Type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
@@ -373,7 +438,7 @@ Configuration CreateCluster {
         File SQLSources {
             Ensure          = 'Present'
             DestinationPath = $Node.Sources
-            type            = 'Directory'
+            Type            = 'Directory'
             DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
         }
 
@@ -398,10 +463,29 @@ Configuration CreateCluster {
             )
         }
 
+        PSResourceRepository PSGallery {
+            Name      = 'PSGallery'
+            Ensure    = 'Present'
+            Default   = $true
+            DependsOn = '[PendingReboot]Reboot'
+        }
+
+        InstallPSResourceGet PSResourceGet {
+            IsSingleInstance = 'Yes'
+            Ensure           = 'Present'
+            DependsOn        = '[PSResourceRepository]PSGallery'
+        }
+
+        InstallPSResourceGetResource SqlServerModule {
+            Name      = 'SqlServer'
+            Ensure    = 'Present'
+            DependsOn = '[InstallPSResourceGet]PSResourceGet'
+        }
+
         MountImage SQLServer {
             ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
             DriveLetter = 'D'
-            DependsOn   = '[PendingReboot]Reboot'
+            DependsOn   = '[InstallPSResourceGetResource]SqlServerModule'
         }
 
         WaitForVolume WaitForISO {
@@ -434,6 +518,53 @@ Configuration CreateCluster {
             AgtSvcStartupType     = 'Automatic'
             PsDscRunAsCredential  = $ActiveDirectoryAdministratorCredential
             DependsOn             = '[WaitForVolume]WaitForISO'
+        }
+
+        PendingReboot RebootAfterSQL2 {
+            Name      = 'Reboot test before SQL Server installation'
+            DependsOn = @(
+                '[SqlSetup]InstallInstanceSQL2'
+            )
+        }
+
+        Service SQLBrowser {
+            Name      = 'SQLBrowser'
+            State     = 'Running'
+            DependsOn = @(
+                '[PendingReboot]RebootAfterSQL2'
+            )
+        }
+
+        Service SQLServerService {
+            Name      = 'MSSQLSERVER'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLBrowser'
+            )
+        }
+
+        Service SQLServerAgent {
+            Name      = 'SQLSERVERAGENT'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLServerService'
+            )
+        }
+
+        Service SQLTelemetry {
+            Name      = 'SQLTELEMETRY'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLServerAgent'
+            )
+        }
+
+        Service SQLWriter {
+            Name      = 'SQLWriter'
+            State     = 'Running'
+            DependsOn = @(
+                '[Service]SQLTelemetry'
+            )
         }
     }
 }
