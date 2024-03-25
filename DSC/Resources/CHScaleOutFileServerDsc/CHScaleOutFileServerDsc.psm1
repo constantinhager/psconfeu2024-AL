@@ -72,7 +72,7 @@ class ScaleOutFileServer {
         if ($IsAbsent) {
             $this.Create($CurrentState)
         } elseif ($ShouldBeAbsent) {
-            $this.Remove()
+            $this.Remove($CurrentState)
         }
     }
 
