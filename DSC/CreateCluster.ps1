@@ -12,6 +12,10 @@ Configuration CreateCluster {
 
         [Parameter(Mandatory)]
         [string]
+        $SQLSVCUserName,
+
+        [Parameter(Mandatory)]
+        [string]
         $ClusterName,
 
         [Parameter(Mandatory)]
@@ -32,6 +36,7 @@ Configuration CreateCluster {
     Import-DscResource -ModuleName 'CHStorageSpacesDirectDsc'
     Import-DscResource -ModuleName 'CHScaleOutFileServerDsc'
     Import-DscResource -ModuleName 'CHPSResourceGetDsc'
+    Import-DscResource -ModuleName 'CHDBAToolsDsc'
     Import-DscResource -ModuleName 'SqlServerDsc'
     Import-DscResource -ModuleName 'StorageDsc'
 
@@ -174,6 +179,12 @@ Configuration CreateCluster {
             DependsOn        = '[PSResourceRepository]PSGallery'
         }
 
+        InstallPSResourceGetResource dbatoolsModule {
+            Name      = 'dbatools'
+            Ensure    = 'Present'
+            DependsOn = '[InstallPSResourceGet]PSResourceGet'
+        }
+
         InstallPSResourceGetResource SqlServerModule {
             Name      = 'SqlServer'
             Ensure    = 'Present'
@@ -263,6 +274,94 @@ Configuration CreateCluster {
             DependsOn = @(
                 '[Service]SQLTelemetry'
             )
+        }
+
+        SqlLogin Add_WindowsUserSqlSvc {
+            Ensure               = 'Present'
+            Name                 = $SQLSVCUserName
+            LoginType            = 'WindowsUser'
+            InstanceName         = $Node.SQLInstanceName
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+            DependsOn            = '[Service]SQLWriter'
+        }
+
+        SqlLogin Add_WindowsUserClusSvc {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            InstanceName         = $Node.SQLInstanceName
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+            DependsOn            = '[Service]SQLWriter'
+        }
+
+        SqlPermission SQLConfigureServerPermissionSYSTEMSvc {
+            InstanceName = $Node.SQLInstanceName
+            Name         = $SQLSVCUserName
+            Permission   = @(
+                ServerPermission {
+                    State      = 'Grant'
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndPoint', 'ConnectSql')
+                }
+                ServerPermission {
+                    State      = 'GrantWithGrant'
+                    Permission = @()
+                }
+                ServerPermission {
+                    State      = 'Deny'
+                    Permission = @()
+                }
+            )
+            DependsOn    = '[SqlLogin]Add_WindowsUserClusSvc'
+        }
+
+        SqlPermission AddNTServiceClusSvcPermissions {
+            InstanceName = $Node.SQLInstanceName
+            Name         = 'NT SERVICE\ClusSvc'
+            Permission   = @(
+                ServerPermission {
+                    State      = 'Grant'
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState')
+                }
+                ServerPermission {
+                    State      = 'GrantWithGrant'
+                    Permission = @()
+                }
+                ServerPermission {
+                    State      = 'Deny'
+                    Permission = @()
+                }
+            )
+            DependsOn    = '[SqlLogin]Add_WindowsUserClusSvc'
+        }
+
+        SqlRole Add_ServerRole_AdminSqlforBI {
+            Ensure               = 'Present'
+            ServerRoleName       = 'sysadmin'
+            MembersToInclude     = $SQLSVCUserName
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlLogin]Add_WindowsUserSqlSvc'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpoint HADREndpoint {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Port                 = 5022
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlRole]Add_ServerRole_AdminSqlforBI'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlwaysOnService EnableHADR {
+            Ensure               = 'Present'
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlEndpoint]HADREndpoint'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        UseInsecureConnection InsecureConnection {
+            IsSingleInstance = 'Yes'
+            DependsOn        = '[SqlAlwaysOnService]EnableHADR'
         }
     }
 
@@ -476,6 +575,12 @@ Configuration CreateCluster {
             DependsOn        = '[PSResourceRepository]PSGallery'
         }
 
+        InstallPSResourceGetResource dbatoolsModule {
+            Name      = 'dbatools'
+            Ensure    = 'Present'
+            DependsOn = '[InstallPSResourceGet]PSResourceGet'
+        }
+
         InstallPSResourceGetResource SqlServerModule {
             Name      = 'SqlServer'
             Ensure    = 'Present'
@@ -565,6 +670,94 @@ Configuration CreateCluster {
             DependsOn = @(
                 '[Service]SQLTelemetry'
             )
+        }
+
+        SqlLogin Add_WindowsUserSqlSvc {
+            Ensure               = 'Present'
+            Name                 = $SQLSVCUserName
+            LoginType            = 'WindowsUser'
+            InstanceName         = $Node.SQLInstanceName
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+            DependsOn            = '[Service]SQLWriter'
+        }
+
+        SqlLogin Add_WindowsUserClusSvc {
+            Ensure               = 'Present'
+            Name                 = 'NT SERVICE\ClusSvc'
+            LoginType            = 'WindowsUser'
+            InstanceName         = $Node.SQLInstanceName
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+            DependsOn            = '[Service]SQLWriter'
+        }
+
+        SqlPermission SQLConfigureServerPermissionSYSTEMSvc {
+            InstanceName = $Node.SQLInstanceName
+            Name         = $SQLSVCUserName
+            Permission   = @(
+                ServerPermission {
+                    State      = 'Grant'
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState', 'AlterAnyEndPoint', 'ConnectSql')
+                }
+                ServerPermission {
+                    State      = 'GrantWithGrant'
+                    Permission = @()
+                }
+                ServerPermission {
+                    State      = 'Deny'
+                    Permission = @()
+                }
+            )
+            DependsOn    = '[SqlLogin]Add_WindowsUserClusSvc'
+        }
+
+        SqlPermission AddNTServiceClusSvcPermissions {
+            InstanceName = $Node.SQLInstanceName
+            Name         = 'NT SERVICE\ClusSvc'
+            Permission   = @(
+                ServerPermission {
+                    State      = 'Grant'
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState')
+                }
+                ServerPermission {
+                    State      = 'GrantWithGrant'
+                    Permission = @()
+                }
+                ServerPermission {
+                    State      = 'Deny'
+                    Permission = @()
+                }
+            )
+            DependsOn    = '[SqlLogin]Add_WindowsUserClusSvc'
+        }
+
+        SqlRole Add_ServerRole_AdminSqlforBI {
+            Ensure               = 'Present'
+            ServerRoleName       = 'sysadmin'
+            MembersToInclude     = $SQLSVCUserName
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlLogin]Add_WindowsUserSqlSvc'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlEndpoint HADREndpoint {
+            EndPointName         = 'HADR'
+            EndpointType         = 'DatabaseMirroring'
+            Port                 = 5022
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlRole]Add_ServerRole_AdminSqlforBI'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        SqlAlwaysOnService EnableHADR {
+            Ensure               = 'Present'
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlEndpoint]HADREndpoint'
+            PsDscRunAsCredential = $SqlAdministratorCredential
+        }
+
+        UseInsecureConnection InsecureConnection {
+            IsSingleInstance = 'Yes'
+            DependsOn        = '[SqlAlwaysOnService]EnableHADR'
         }
     }
 }
