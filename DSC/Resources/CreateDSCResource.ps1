@@ -36,3 +36,16 @@ $splat = @{
     ItemType = 'File'
 }
 New-Item @splat
+
+$ModuleSettings = @{
+    RootModule           = 'CHDBAToolsDsc.psm1'
+    DscResourcesToExport = 'UseInsecureConnection'
+    Path                 = "$PSScriptRoot\CHDBAToolsDsc\CHDBAToolsDsc.psd1"
+}
+New-ModuleManifest @ModuleSettings
+
+$splat = @{
+    Path     = "$PSScriptRoot\CHDBAToolsDsc\CHDBAToolsDsc.psm1"
+    ItemType = 'File'
+}
+New-Item @splat
