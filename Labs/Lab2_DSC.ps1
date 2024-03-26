@@ -215,6 +215,7 @@ $splat = @{
     ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.SQLSVCUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.SQLSvcPassword -AsPlainText -Force)
 }
 $SQLSVCCredential = New-Object @splat
+$SQLSVCUserName = "$($SecretFile.Lab2.DomainNetBiosName)\$($SecretFile.Lab2.SQLSVCUserName)"
 
 $splat = @{
     TypeName     = 'System.Management.Automation.PSCredential'
@@ -235,4 +236,5 @@ Invoke-LabDscConfiguration -Configuration (Get-Command -Name CreateCluster) -Com
     StorageAccountName                     = $SecretFile.Lab2.witnessStorageAccountName
     StorageAccountAccessKey                = $SecretFile.Lab2.witnessStorageAccountKey
     SQLCredential                          = $SQLSVCCredential
+    SQLSVCUserName                         = $SQLSVCUserName
 }
