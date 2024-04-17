@@ -39,6 +39,7 @@ Configuration CreateCluster {
     Import-DscResource -ModuleName 'CHDBAToolsDsc'
     Import-DscResource -ModuleName 'SqlServerDsc'
     Import-DscResource -ModuleName 'StorageDsc'
+    Import-DscResource -ModuleName 'AccessControlDSC'
 
     node $AllNodes.Where({ $_.Role -eq 'FirstNode' }).NodeName {
 
@@ -103,66 +104,10 @@ Configuration CreateCluster {
             RetryCount       = 60
         }
 
-        File Data_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = $Node.Data1
-            Type            = 'Directory'
-            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Data_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Data_LAB2SQL1'
-            Path       = $Node.Data1
-            ScopeName  = $Node.SOFSName
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Data_LAB2SQL1'
-        }
-
-        File Log_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = $Node.Log1
-            Type            = 'Directory'
-            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Log_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Log_LAB2SQL1'
-            Path       = $Node.Log1
-            ScopeName  = $Node.SOFSName
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Log_LAB2SQL1'
-        }
-
-        File Backup_LAB2SQL1 {
-            Ensure          = 'Present'
-            DestinationPath = $Node.Backup1
-            Type            = 'Directory'
-            DependsOn       = '[WaitForScaleoutFileServer]LAB2SQLSOF'
-        }
-
-        SmbShare Backup_LAB2SQL1 {
-            Ensure     = 'Present'
-            Name       = 'Backup_LAB2SQL1'
-            Path       = $Node.Backup1
-            ScopeName  = $Node.SOFSName
-            FullAccess = @(
-                'Everyone'
-            )
-            DependsOn  = '[File]Backup_LAB2SQL1'
-        }
-
         PendingReboot Reboot {
             Name      = 'Reboot test before SQL Server installation'
             DependsOn = @(
-                '[SmbShare]Data_LAB2SQL1',
-                '[SmbShare]Log_LAB2SQL1',
-                '[SmbShare]Backup_LAB2SQL1'
+                '[WaitForScaleoutFileServer]LAB2SQLSOF'
             )
         }
 
@@ -195,6 +140,7 @@ Configuration CreateCluster {
             ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
             DriveLetter = 'D'
             DependsOn   = '[InstallPSResourceGetResource]SqlServerModule'
+            Ensure      = 'Present'
         }
 
         WaitForVolume WaitForISO {
@@ -220,7 +166,8 @@ Configuration CreateCluster {
             SQLTempDBLogDir       = $Node.Log1
             SQLBackupDir          = $Node.Backup1
             SourcePath            = 'D:\'
-            UpdateEnabled         = 'False'
+            UpdateEnabled         = 'True'
+            UpdateSource          = 'C:\Sources'
             ForceReboot           = $false
             SqlSvcStartupType     = 'Automatic'
             BrowserSvcStartupType = 'Automatic'
@@ -294,6 +241,15 @@ Configuration CreateCluster {
             DependsOn            = '[Service]SQLWriter'
         }
 
+        SqlLogin Add_ClusterMember {
+            Ensure               = 'Present'
+            Name                 = ('CONTOSO\{0}$' -f $Node.SQLNode2)
+            LoginType            = 'WindowsUser'
+            InstanceName         = $Node.SQLInstanceName
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+            DependsOn            = '[Service]SQLWriter'
+        }
+
         SqlPermission SQLConfigureServerPermissionSYSTEMSvc {
             InstanceName = $Node.SQLInstanceName
             Name         = $SQLSVCUserName
@@ -320,7 +276,7 @@ Configuration CreateCluster {
             Permission   = @(
                 ServerPermission {
                     State      = 'Grant'
-                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState')
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState', 'ConnectSql')
                 }
                 ServerPermission {
                     State      = 'GrantWithGrant'
@@ -334,13 +290,13 @@ Configuration CreateCluster {
             DependsOn    = '[SqlLogin]Add_WindowsUserClusSvc'
         }
 
-        SqlRole Add_ServerRole_AdminSqlforBI {
+        SqlRole Add_SysAdmins {
             Ensure               = 'Present'
             ServerRoleName       = 'sysadmin'
-            MembersToInclude     = $SQLSVCUserName
+            MembersToInclude     = $SQLSVCUserName, ('CONTOSO\{0}$' -f $Node.SQLNode2)
             InstanceName         = $Node.SQLInstanceName
-            DependsOn            = '[SqlLogin]Add_WindowsUserSqlSvc'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            DependsOn            = '[SqlLogin]Add_WindowsUserSqlSvc', '[SqlLogin]Add_ClusterMember'
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
         SqlEndpoint HADREndpoint {
@@ -348,23 +304,73 @@ Configuration CreateCluster {
             EndpointType         = 'DatabaseMirroring'
             Port                 = 5022
             InstanceName         = $Node.SQLInstanceName
-            DependsOn            = '[SqlRole]Add_ServerRole_AdminSqlforBI'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            DependsOn            = '[SqlRole]Add_SysAdmins'
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
         SqlAlwaysOnService EnableHADR {
             Ensure               = 'Present'
             InstanceName         = $Node.SQLInstanceName
             DependsOn            = '[SqlEndpoint]HADREndpoint'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
-        UseInsecureConnection InsecureConnection {
-            IsSingleInstance = 'Yes'
-            DependsOn        = '[SqlAlwaysOnService]EnableHADR'
+        RestoreDbaDatabase AdventureWorks {
+            DatabaseName      = 'AdventureWorks'
+            SqlInstance       = $Node.SQLInstanceName
+            RestoreFolderPath = 'C:\Sources\AdventureWorksLT2022.bak'
+            DependsOn         = '[SqlAlwaysOnService]EnableHADR'
+        }
+
+        SetDbaDbRecoveryModel AdventureWorksRecoveryModel {
+            DatabaseName  = 'AdventureWorks'
+            SqlInstance   = $Node.SQLInstanceName
+            RecoveryModel = 'FULL'
+            DependsOn     = '[RestoreDbaDatabase]AdventureWorks'
+        }
+
+        WaitForDbaInstance SecondNode {
+            InstanceName     = $Node.SQLInstanceNode2
+            RetryCount       = 60
+            RetryIntervalSec = 10
+            DependsOn        = '[SetDbaDbRecoveryModel]AdventureWorksRecoveryModel'
+        }
+
+        PrepareDbaAGDatabase AdventureWorks {
+            DatabaseName         = 'AdventureWorks'
+            SqlInstanceNode1     = $Node.SQLInstanceName
+            SqlInstanceNode2     = $Node.SQLInstanceNode2
+            BackupPath           = $Node.Backup1
+            DependsOn            = '[WaitForDbaInstance]SecondNode'
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+        }
+
+        SqlAG LAB2SQLAG {
+            Ensure                 = 'Present'
+            Name                   = $Node.SQLAvailabilityGroupName
+            InstanceName           = $Node.SQLInstanceName
+            ServerName             = $Node.NodeName
+            FailoverMode           = 'Automatic'
+            AvailabilityMode       = 'SynchronousCommit'
+            BasicAvailabilityGroup = $false
+            DatabaseHealthTrigger  = $true
+            DtcSupportEnabled      = $true
+            DependsOn              = '[SqlAlwaysOnService]EnableHADR', '[SqlEndpoint]HADREndpoint', '[SqlPermission]AddNTServiceClusSvcPermissions'
+            PsDscRunAsCredential   = $ActiveDirectoryAdministratorCredential
+        }
+
+        SqlAGListener 'LAB2SQLAGListener' {
+            Ensure                  = 'Present'
+            ServerName              = $Node.NodeName
+            InstanceName            = $Node.SQLInstanceName
+            AvailabilityGroup       = $Node.SQLAvailabilityGroupName
+            Name                    = $Node.SQLAvailabilityGroupName
+            IpAddress               = $Node.SQLAvailabilityGroupIPAddress
+            Port                    = 1433
+            ProcessOnlyOnActiveNode = $true
+            PsDscRunAsCredential    = $ActiveDirectoryAdministratorCredential
         }
     }
-
 
     node $AllNodes.Where({ $_.Role -eq 'SecondNode' }).NodeName {
         WindowsFeature AddFileServerFeature {
@@ -552,13 +558,101 @@ Configuration CreateCluster {
             DependsOn  = '[File]SQLSources'
         }
 
+        File Data_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Data1
+            Type            = 'Directory'
+            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Data_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Data_LAB2SQL1'
+            Path       = $Node.Data1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Data_LAB2SQL1'
+        }
+
+        File Log_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Log1
+            Type            = 'Directory'
+            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Log_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Log_LAB2SQL1'
+            Path       = $Node.Log1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Log_LAB2SQL1'
+        }
+
+        File Backup_LAB2SQL1 {
+            Ensure          = 'Present'
+            DestinationPath = $Node.Backup1
+            Type            = 'Directory'
+            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Backup_LAB2SQL1 {
+            Ensure     = 'Present'
+            Name       = 'Backup_LAB2SQL1'
+            Path       = $Node.Backup1
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Backup_LAB2SQL1'
+        }
+
+        File Backup_LAB2SQLAG {
+            Ensure          = 'Present'
+            DestinationPath = $Node.SQLAvailabilityGroupBackupDir
+            Type            = 'Directory'
+            DependsOn       = '[ScaleOutFileServer]LAB2SQLSOF'
+        }
+
+        SmbShare Backup_LAB2SQLAG {
+            Ensure     = 'Present'
+            Name       = 'Backup_LAB2SQLAG'
+            Path       = $Node.SQLAvailabilityGroupBackupDir
+            ScopeName  = $Node.SOFSName
+            FullAccess = @(
+                'Everyone'
+            )
+            DependsOn  = '[File]Backup_LAB2SQLAG'
+        }
+
+        NTFSAccessEntry Backup_LAB2SQLAG {
+            Path              = $Node.SQLAvailabilityGroupBackupDir
+            AccessControlList = @(
+                NTFSAccessControlList {
+                    Principal          = 'contoso\sqlsvc'
+                    ForcePrincipal     = $true
+                    AccessControlEntry = @(
+                        NTFSAccessControlEntry {
+                            AccessControlType = 'Allow'
+                            FileSystemRights  = 'FullControl'
+                            Inheritance       = 'This folder subfolders and files'
+                            Ensure            = 'Present'
+                        }
+                    )
+                }
+            )
+            DependsOn         = '[SmbShare]Backup_LAB2SQLAG', '[File]Backup_LAB2SQLAG'
+        }
+
         PendingReboot Reboot {
             Name      = 'Reboot test before SQL Server installation'
             DependsOn = @(
-                '[SmbShare]Data_LAB2SQL2',
-                '[SmbShare]Log_LAB2SQL2',
-                '[SmbShare]Backup_LAB2SQL2',
-                '[SmbShare]SQLSources'
+                '[NTFSAccessEntry]Backup_LAB2SQLAG'
             )
         }
 
@@ -591,6 +685,7 @@ Configuration CreateCluster {
             ImagePath   = 'C:\Sources\enu_sql_server_2022_enterprise_edition_x64_dvd_aa36de9e.iso'
             DriveLetter = 'D'
             DependsOn   = '[InstallPSResourceGetResource]SqlServerModule'
+            Ensure      = 'Present'
         }
 
         WaitForVolume WaitForISO {
@@ -616,7 +711,8 @@ Configuration CreateCluster {
             SQLTempDBLogDir       = $Node.Log2
             SQLBackupDir          = $Node.Backup2
             SourcePath            = 'D:\'
-            UpdateEnabled         = 'False'
+            UpdateEnabled         = 'True'
+            UpdateSource          = 'C:\Sources'
             ForceReboot           = $false
             SqlSvcStartupType     = 'Automatic'
             BrowserSvcStartupType = 'Automatic'
@@ -716,7 +812,7 @@ Configuration CreateCluster {
             Permission   = @(
                 ServerPermission {
                     State      = 'Grant'
-                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState')
+                    Permission = @('AlterAnyAvailabilityGroup', 'ViewServerState', 'ConnectSql')
                 }
                 ServerPermission {
                     State      = 'GrantWithGrant'
@@ -736,7 +832,7 @@ Configuration CreateCluster {
             MembersToInclude     = $SQLSVCUserName
             InstanceName         = $Node.SQLInstanceName
             DependsOn            = '[SqlLogin]Add_WindowsUserSqlSvc'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
         SqlEndpoint HADREndpoint {
@@ -745,19 +841,50 @@ Configuration CreateCluster {
             Port                 = 5022
             InstanceName         = $Node.SQLInstanceName
             DependsOn            = '[SqlRole]Add_ServerRole_AdminSqlforBI'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
         SqlAlwaysOnService EnableHADR {
             Ensure               = 'Present'
             InstanceName         = $Node.SQLInstanceName
             DependsOn            = '[SqlEndpoint]HADREndpoint'
-            PsDscRunAsCredential = $SqlAdministratorCredential
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
         }
 
-        UseInsecureConnection InsecureConnection {
-            IsSingleInstance = 'Yes'
-            DependsOn        = '[SqlAlwaysOnService]EnableHADR'
+        SqlWaitForAG 'LAB2SQLAG' {
+            Name                 = $Node.SQLAvailabilityGroupName
+            ServerName           = 'LAB2SQL1'
+            RetryIntervalSec     = 20
+            RetryCount           = 30
+            InstanceName         = $Node.SQLInstanceName
+            DependsOn            = '[SqlAlwaysOnService]EnableHADR'
+            PsDscRunAsCredential = $ActiveDirectoryAdministratorCredential
+        }
+
+        SqlAGReplica 'AddReplica' {
+            Ensure                     = 'Present'
+            Name                       = $Node.NodeName
+            AvailabilityGroupName      = $Node.SQLAvailabilityGroupName
+            ServerName                 = $Node.NodeName
+            InstanceName               = $Node.SQLInstanceName
+            PrimaryReplicaServerName   = 'LAB2SQL1'
+            PrimaryReplicaInstanceName = 'MSSQLSERVER'
+            FailoverMode               = 'Automatic'
+            AvailabilityMode           = 'SynchronousCommit'
+            DependsOn                  = '[SqlWaitForAG]LAB2SQLAG'
+            PsDscRunAsCredential       = $ActiveDirectoryAdministratorCredential
+        }
+
+        SqlAGDatabase 'AddAGDatabaseMemberships' {
+            AvailabilityGroupName = $Node.SQLAvailabilityGroupName
+            BackupPath            = '\\LAB2SQLSOF\Backup_LAB2SQLAG'
+            DatabaseName          = 'AdventureWorks'
+            InstanceName          = 'MSSQLSERVER'
+            ServerName            = 'LAB2SQL1'
+            Ensure                = 'Present'
+
+            PsDscRunAsCredential  = $ActiveDirectoryAdministratorCredential
+            DependsOn             = '[SqlAGReplica]AddReplica'
         }
     }
 }
