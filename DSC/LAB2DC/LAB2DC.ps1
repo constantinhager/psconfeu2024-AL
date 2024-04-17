@@ -11,7 +11,7 @@ Configuration LAB2DC
     Import-DscResource -ModuleName 'ActiveDirectoryDSC'
     Import-DscResource -ModuleName 'DnsServerDsc'
 
-    Node 'localhost' {
+    Node $AllNodes.Where({ $_.Role -eq 'DomainController' }).NodeName {
 
         ADUser 'sqlsvc' {
             Ensure               = 'Present'
