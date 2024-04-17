@@ -95,6 +95,8 @@ Add-LabMachineDefinition @splat
 
 Install-Lab
 
+Checkpoint-LabVM -ComputerName LAB2DC, LAB2SQL1, LAB2SQL2 -SnapshotName 'Before SQL Server Installation'
+
 # Download SQL Server 2022 current Cumulative Update
 $splat = @{
     Uri  = 'https://download.microsoft.com/download/9/6/8/96819b0c-c8fb-4b44-91b5-c97015bbda9f/SQLServer2022-KB5032679-x64.exe'
@@ -115,6 +117,8 @@ $Splat = @{
     Path = "$labSources\SoftwarePackages\AdventureWorksLT2022.bak"
 }
 Get-LabInternetFile @splat
+
+Import-Lab -Name $labName -NoValidation
 
 $splat = @{
     ComputerName          = 'LAB2SQL1'
@@ -188,28 +192,40 @@ $Splat = @{
 }
 Install-LabSoftwarePackage @Splat
 
-# Restart LAB1SQL1
-Write-ScreenInfo -Message 'Restarting LAB1SQL1' -TaskStart
-Restart-LabVM -ComputerName LAB1SQL1 -Wait -ProgressIndicator 5
-Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL1' -TaskEnd
+# Install PSResourceGet Module
+Invoke-LabCommand -ComputerName LAB2SQL1, LAB2SQL2 -ActivityName 'Install PSResourceGet Module' -ScriptBlock {
+    while ($null -eq (Get-PSRepository)) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+        Register-PSRepository -Default
+        Start-Sleep -Seconds 5
+    }
 
-# Restart LAB1SQL2
-Write-ScreenInfo -Message 'Restarting LAB1SQL2' -TaskStart
-Restart-LabVM -ComputerName Lab1SQL2 -Wait -ProgressIndicator 5
-Write-ScreenInfo -Message 'Sucessfully restarted LAB1SQL2' -TaskEnd
+    Install-Module -Name Microsoft.PowerShell.PSResourceGet -Force
+} -PassThru
 
-# Install PSDesiredStateConfiguration and ActiveDirectory DSC Resource
-Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
-Install-Module -Name DNSServerDSC -Force -SkipPublisherCheck
-Install-Module -Name ComputerManagementDsc -Force -SkipPublisherCheck
-Install-Module -Name FailoverClusterDSC -Force -SkipPublisherCheck
-Install-Module -Name SqlServerDsc -Force -SkipPublisherCheck
-Install-Module -Name StorageDsc -Force -SkipPublisherCheck
+# Restart LAB2SQL1
+Write-ScreenInfo -Message 'Restarting LAB2SQL1' -TaskStart
+Restart-LabVM -ComputerName LAB2SQL1 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB2SQL1' -TaskEnd
 
-Set-LabDscLocalConfigurationManagerConfiguration -ComputerName LAB2SQL1, LAB2SQL2 -RebootNodeIfNeeded $true
+# Restart LAB2SQL2
+Write-ScreenInfo -Message 'Restarting LAB2SQL2' -TaskStart
+Restart-LabVM -ComputerName Lab2SQL2 -Wait -ProgressIndicator 5
+Write-ScreenInfo -Message 'Sucessfully restarted LAB2SQL2' -TaskEnd
+
+#Install-Module -Name ActiveDirectoryDSC -Force -SkipPublisherCheck
+#Install-Module -Name DNSServerDSC -Force -SkipPublisherCheck
+#Install-Module -Name ComputerManagementDsc -Force -SkipPublisherCheck
+#Install-Module -Name FailoverClusterDSC -Force -SkipPublisherCheck
+#Install-Module -Name SqlServerDsc -Force -SkipPublisherCheck
+#Install-Module -Name StorageDsc -Force -SkipPublisherCheck
+#Install-Module -Name AccessControlDSC -Force -SkipPublisherCheck
+
+Set-LabDscLocalConfigurationManagerConfiguration -ComputerName LAB2SQL1, LAB2SQL2 -RebootNodeIfNeeded $true -ErrorAction SilentlyContinue
 
 # LAB2DC
 . E:\GIT\psconfeu2024-AL\DSC\LAB2DC\LAB2DC.ps1
+
 $splat = @{
     TypeName     = 'System.Management.Automation.PSCredential'
     ArgumentList = "$($SecretFile.Lab2.DomainName)\$($SecretFile.Lab2.SQLSVCUserName)", (ConvertTo-SecureString -String $SecretFile.Lab2.SQLSvcPassword -AsPlainText -Force)
